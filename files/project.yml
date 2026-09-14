@@ -23,7 +23,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.undu.safeflame
         PRODUCT_NAME: SafeFlame
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.0.1"
         CURRENT_PROJECT_VERSION: "2"
         INFOPLIST_KEY_CFBundleShortVersionString: "1.0"
         INFOPLIST_KEY_CFBundleVersion: "2"
