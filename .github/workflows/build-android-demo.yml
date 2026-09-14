@@ -38,13 +38,13 @@ jobs:
       - name: Record the real Android foreground-service demo
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
+          api-level: 28
+          target: default
+          arch: x86
           profile: pixel_2
           cores: 4
-          ram-size: 4096M
-          heap-size: 512M
+          ram-size: 2048M
+          heap-size: 256M
           force-avd-creation: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect
           emulator-boot-timeout: 900
@@ -54,28 +54,35 @@ jobs:
             adb shell pm grant com.qila.safeflame android.permission.CAMERA
             adb shell pm grant com.qila.safeflame android.permission.POST_NOTIFICATIONS || true
             adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
-            sleep 5
-            adb shell screenrecord --bit-rate 4000000 --time-limit 52 /sdcard/safe-flame-screen.mp4 &
-            sleep 3
+            mkdir -p review-frames
+            frame=0
+            capture() {
+              adb exec-out screencap -p > "review-frames/frame-$(printf '%04d' "$frame").png"
+              frame=$((frame + 1))
+            }
+            for i in 1 2 3 4 5; do capture; sleep 1; done
             adb shell input tap 540 750
-            sleep 7
-            adb shell monkey -p com.android.launcher3 1 || adb shell input keyevent KEYCODE_HOME
-            sleep 7
-            adb shell input swipe 540 5 540 1500 800
-            sleep 5
+            for i in 1 2 3 4 5 6 7; do capture; sleep 1; done
+            adb shell input keyevent KEYCODE_HOME
+            for i in 1 2 3 4 5 6 7; do capture; sleep 1; done
+            adb shell input swipe 540 5 540 1500 500
+            for i in 1 2 3 4 5; do capture; sleep 1; done
             adb shell input keyevent KEYCODE_BACK
-            sleep 3
+            sleep 2
             adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
-            sleep 6
+            for i in 1 2 3 4 5 6; do capture; sleep 1; done
             adb shell input tap 540 750
-            sleep 4
-            adb pull /sdcard/safe-flame-screen.mp4 safe-flame-screen.mp4
+            for i in 1 2 3 4; do capture; sleep 1; done
+            test "$(find review-frames -name 'frame-*.png' | wc -l)" -ge 30
             adb shell am force-stop com.qila.safeflame || true
 
       - name: Add the selected app sound to the recording
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg
+          ffmpeg -hide_banner -loglevel error -y \
+            -framerate 1 -i review-frames/frame-%04d.png \
+            -c:v libx264 -pix_fmt yuv420p -r 30 safe-flame-screen.mp4
           ffmpeg -hide_banner -loglevel error -y \
             -i safe-flame-screen.mp4 \
             -stream_loop -1 -i files/SafeFlame/Resources/fireplace.wav \
