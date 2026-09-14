@@ -1,0 +1,91 @@
+name: Build Safe Flame Android demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Build test APK
+        run: gradle --no-daemon --stacktrace -p android assembleDebug
+
+      - name: Run Safe Flame in an Android emulator and record the demo
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant com.qila.safeflame android.permission.CAMERA
+            adb shell pm grant com.qila.safeflame android.permission.POST_NOTIFICATIONS || true
+            adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
+            sleep 3
+            adb shell screenrecord --bit-rate 4000000 --time-limit 38 /sdcard/safe-flame-demo.mp4 &
+            sleep 2
+            adb shell input tap 540 875
+            sleep 7
+            adb shell input keyevent KEYCODE_HOME
+            sleep 5
+            adb shell input swipe 540 8 540 1200 500
+            sleep 5
+            adb shell input keyevent KEYCODE_BACK
+            adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
+            sleep 4
+            adb shell input tap 540 875
+            sleep 3
+            adb shell input tap 540 1700
+            sleep 3
+            adb shell input tap 540 960
+            sleep 3
+            adb shell input tap 540 875
+            sleep 2
+            adb pull /sdcard/safe-flame-demo.mp4 safe-flame-android-demo.mp4
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-flame-android-demo
+          path: safe-flame-android-demo.mp4
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish public demo link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view safe-flame-android-demo >/dev/null 2>&1 || \
+            gh release create safe-flame-android-demo \
+              --title "Safe Flame Android demo" \
+              --notes "Android foreground-service demonstration for Google Play review." \
+              --latest=false
+          gh release upload safe-flame-android-demo safe-flame-android-demo.mp4 --clobber
