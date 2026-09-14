@@ -225,18 +225,21 @@ final class CandleController: ObservableObject {
     func stop() {
         guard isRunning || flickerTask != nil else { return }
 
+        isRunning = false
         wakeFromSleepDimmer()
         flickerTask?.cancel()
         flickerTask = nil
         stopAudio()
-        isRunning = false
         UIApplication.shared.isIdleTimerDisabled = false
 
         if let torch {
-            try? setTorchLevel(0, on: torch)
-            try? torch.lockForConfiguration()
-            torch.torchMode = .off
-            torch.unlockForConfiguration()
+            do {
+                try torch.lockForConfiguration()
+                defer { torch.unlockForConfiguration() }
+                torch.torchMode = .off
+            } catch {
+                // The torch may already be unavailable or cooling down.
+            }
         }
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -343,7 +346,6 @@ final class CandleController: ObservableObject {
     private func stopAudio() {
         audioPlayerNode?.stop()
         audioEngine?.stop()
-        audioEngine?.reset()
         audioPlayerNode = nil
         audioEngine = nil
     }
