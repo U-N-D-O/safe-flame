@@ -24,6 +24,14 @@ enum FlameMode: Int, CaseIterable, Identifiable {
         }
     }
 
+    var imageName: String? {
+        switch self {
+        case .fireplace: return nil
+        case .candle: return "Candle"
+        case .moonlight: return "moon"
+        }
+    }
+
     var soundName: String {
         switch self {
         case .fireplace: return "fireplace"
@@ -76,6 +84,48 @@ enum FlameMode: Int, CaseIterable, Identifiable {
         case .fireplace: return 450_000_000...1_200_000_000
         case .candle: return 180_000_000...650_000_000
         case .moonlight: return 900_000_000...1_800_000_000
+        }
+    }
+
+    // A real flame is mostly calm, with occasional air movement that causes
+    // a quick dip, a small bloom, and then a gentle return to normal.
+    var airPulseChance: Double {
+        switch self {
+        case .fireplace: return 0.055
+        case .candle: return 0.12
+        case .moonlight: return 0
+        }
+    }
+
+    var airPulseDipLevels: ClosedRange<Float> {
+        switch self {
+        case .fireplace: return 0.026...0.043
+        case .candle: return 0.019...0.036
+        case .moonlight: return 0.022...0.05
+        }
+    }
+
+    var airPulseBloomLevels: ClosedRange<Float> {
+        switch self {
+        case .fireplace: return 0.10...0.145
+        case .candle: return 0.095...0.15
+        case .moonlight: return 0.022...0.05
+        }
+    }
+
+    var airPulseDipDurations: ClosedRange<UInt64> {
+        switch self {
+        case .fireplace: return 180_000_000...320_000_000
+        case .candle: return 140_000_000...280_000_000
+        case .moonlight: return 1_800_000_000...3_200_000_000
+        }
+    }
+
+    var airPulseBloomDurations: ClosedRange<UInt64> {
+        switch self {
+        case .fireplace: return 350_000_000...700_000_000
+        case .candle: return 280_000_000...600_000_000
+        case .moonlight: return 1_800_000_000...3_200_000_000
         }
     }
 
@@ -187,6 +237,20 @@ final class CandleController: ObservableObject {
             guard let self else { return }
 
             while !Task.isCancelled {
+                if Double.random(in: 0...1) < selectedMode.airPulseChance {
+                    // A small gust: dip quickly, bloom briefly, then settle.
+                    let dip = Float.random(in: selectedMode.airPulseDipLevels)
+                    let bloom = Float.random(in: selectedMode.airPulseBloomLevels)
+                    await self.fadeTorch(
+                        to: dip,
+                        over: UInt64.random(in: selectedMode.airPulseDipDurations)
+                    )
+                    await self.fadeTorch(
+                        to: bloom,
+                        over: UInt64.random(in: selectedMode.airPulseBloomDurations)
+                    )
+                }
+
                 let target = Float.random(in: selectedMode.targetTorchLevels)
                 let duration = UInt64.random(in: selectedMode.fadeDurations)
                 await self.fadeTorch(to: target, over: duration)

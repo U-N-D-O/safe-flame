@@ -41,8 +41,10 @@ jobs:
         run: |
           app="device-build/Build/Products/Release-iphoneos/SafeFlame.app"
           cp files/SafeFlame/Resources/fireplace.wav "$app/"
-          cp files/SafeFlame/Resources/candle.mp3 "$app/"
+          cp files/SafeFlame/Resources/candle.wav "$app/"
           cp files/SafeFlame/Resources/nightlight.wav "$app/"
+          cp files/SafeFlame/Resources/Candle.png "$app/"
+          cp files/SafeFlame/Resources/moon.png "$app/"
           cp files/SafeFlame/Resources/CC0-NOTICE.txt "$app/"
 
       - name: Package unsigned IPA

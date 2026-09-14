@@ -27,9 +27,7 @@ struct ContentView: View {
                 Button {
                     candle.toggle()
                 } label: {
-                    Image(systemName: candle.mode.iconName)
-                        .font(.system(size: 34, weight: .medium))
-                        .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
+                    modeIcon
                         .frame(width: 116, height: 116)
                         .background {
                             Circle()
@@ -56,6 +54,20 @@ struct ContentView: View {
                     candle.selectNextMode()
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var modeIcon: some View {
+        if let imageName = candle.mode.imageName {
+            Image(imageName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 66, height: 66)
+        } else {
+            Image(systemName: candle.mode.iconName)
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
         }
     }
 
