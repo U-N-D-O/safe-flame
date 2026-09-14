@@ -38,17 +38,17 @@ jobs:
       - name: Record the real Android foreground-service demo
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 28
-          target: default
-          arch: x86
+          api-level: 35
+          target: google_apis
+          arch: x86_64
           profile: pixel_2
           cores: 4
-          ram-size: 2048M
-          heap-size: 256M
+          ram-size: 4096M
+          heap-size: 512M
           force-avd-creation: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect
           emulator-boot-timeout: 900
-          disable-animations: false
+          disable-animations: true
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.qila.safeflame android.permission.CAMERA
