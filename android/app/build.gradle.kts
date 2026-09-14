@@ -12,7 +12,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.undu.safeflame"
+        applicationId = "com.qila.safeflame"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
