@@ -11,3 +11,11 @@ The flicker controller uses an original Swift implementation of a smoothed rando
 ## Unsigned IPA
 
 The GitHub Actions workflow installs XcodeGen, generates `files/SafeFlame.xcodeproj`, builds an unsigned device app, packages `SafeFlame-unsigned.ipa`, and publishes the artifact for AltServer or AltStore.
+
+## Google Play Android build
+
+The Android port is in `android/`. It uses a foreground service for torch flicker and looping audio, and shares the WAV files from `files/SafeFlame/Resources`. The manual `Build Safe Flame Android` workflow produces a signed Android App Bundle (`.aab`) and the Google Play feature graphic.
+
+Google Play requires new apps to be uploaded as Android App Bundles. The current Play listing feature graphic is `store/google-play/feature-graphic.jpg` at 1024 × 500 pixels, 24-bit RGB JPEG.
+
+Before running the Android workflow, add these repository secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. `ANDROID_KEYSTORE_BASE64` is the base64-encoded upload keystore; keep the keystore and passwords private because the same signing identity is needed for future updates.
