@@ -1,14 +1,101 @@
 import AVFoundation
 import SwiftUI
 
+enum FlameMode: Int, CaseIterable, Identifiable {
+    case fireplace
+    case candle
+    case moonlight
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .fireplace: return "Fireplace"
+        case .candle: return "Candle"
+        case .moonlight: return "Moonlight"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .fireplace: return "flame.fill"
+        case .candle: return "flame"
+        case .moonlight: return "moon.stars.fill"
+        }
+    }
+
+    var soundName: String {
+        switch self {
+        case .fireplace: return "fireplace"
+        case .candle: return "candle"
+        case .moonlight: return "nightlight"
+        }
+    }
+
+    var soundExtension: String {
+        switch self {
+        case .fireplace, .moonlight: return "wav"
+        case .candle: return "mp3"
+        }
+    }
+
+    var soundVolume: Float {
+        switch self {
+        case .fireplace: return 0.34
+        case .candle: return 0.18
+        case .moonlight: return 0.16
+        }
+    }
+
+    var defaultTorchLevel: Float {
+        switch self {
+        case .fireplace: return 0.065
+        case .candle: return 0.055
+        case .moonlight: return 0.035
+        }
+    }
+
+    var targetTorchLevels: ClosedRange<Float> {
+        switch self {
+        case .fireplace: return 0.042...0.095
+        case .candle: return 0.032...0.12
+        case .moonlight: return 0.022...0.05
+        }
+    }
+
+    var fadeDurations: ClosedRange<UInt64> {
+        switch self {
+        case .fireplace: return 900_000_000...1_800_000_000
+        case .candle: return 450_000_000...1_100_000_000
+        case .moonlight: return 1_800_000_000...3_200_000_000
+        }
+    }
+
+    var pauses: ClosedRange<UInt64> {
+        switch self {
+        case .fireplace: return 450_000_000...1_200_000_000
+        case .candle: return 180_000_000...650_000_000
+        case .moonlight: return 900_000_000...1_800_000_000
+        }
+    }
+
+    var accentColor: Color {
+        switch self {
+        case .fireplace: return .orange
+        case .candle: return Color(red: 1.0, green: 0.48, blue: 0.16)
+        case .moonlight: return Color(red: 0.42, green: 0.62, blue: 1.0)
+        }
+    }
+}
+
 @MainActor
 final class CandleController: ObservableObject {
     @Published private(set) var isRunning = false
+    @Published private(set) var mode: FlameMode = .fireplace
 
     private var torch: AVCaptureDevice?
     private var flickerTask: Task<Void, Never>?
     private var audioPlayer: AVAudioPlayer?
-    private var audioConfigured = false
 
     init() {
         torch = AVCaptureDevice.default(for: .video)
@@ -22,12 +109,36 @@ final class CandleController: ObservableObject {
         isRunning ? stop() : start()
     }
 
+    func selectPreviousMode() {
+        let count = FlameMode.allCases.count
+        let index = (mode.rawValue - 1 + count) % count
+        selectMode(FlameMode(rawValue: index) ?? .fireplace)
+    }
+
+    func selectNextMode() {
+        let count = FlameMode.allCases.count
+        let index = (mode.rawValue + 1) % count
+        selectMode(FlameMode(rawValue: index) ?? .fireplace)
+    }
+
+    private func selectMode(_ newMode: FlameMode) {
+        guard newMode != mode else { return }
+        mode = newMode
+
+        guard isRunning else { return }
+        flickerTask?.cancel()
+        flickerTask = nil
+        try? setTorchLevel(mode.defaultTorchLevel)
+        startFlickerLoopIfNeeded()
+        playAudio()
+    }
+
     func start() {
         guard !isRunning else { return }
         guard let torch, torch.hasTorch, torch.isTorchAvailable else { return }
 
         do {
-            try setTorchLevel(0.065)
+            try setTorchLevel(mode.defaultTorchLevel)
         } catch {
             return
         }
@@ -36,15 +147,7 @@ final class CandleController: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         startFlickerLoopIfNeeded()
 
-        // The torch is the primary feature. If audio is unavailable for any
-        // reason, the candle light should still start and remain usable.
-        do {
-            try configureAudio()
-            audioPlayer?.currentTime = 0
-            audioPlayer?.play()
-        } catch {
-            audioPlayer = nil
-        }
+        playAudio()
     }
 
     func stop() {
@@ -78,16 +181,17 @@ final class CandleController: ObservableObject {
 
     private func startFlickerLoopIfNeeded() {
         guard flickerTask == nil, isRunning else { return }
+        let selectedMode = mode
 
         flickerTask = Task { [weak self] in
             guard let self else { return }
 
             while !Task.isCancelled {
-                let target = Float.random(in: 0.042...0.095)
-                let duration = UInt64.random(in: 900...1800) * 1_000_000
+                let target = Float.random(in: selectedMode.targetTorchLevels)
+                let duration = UInt64.random(in: selectedMode.fadeDurations)
                 await self.fadeTorch(to: target, over: duration)
 
-                let pause = UInt64.random(in: 450...1200) * 1_000_000
+                let pause = UInt64.random(in: selectedMode.pauses)
                 try? await Task.sleep(nanoseconds: pause)
             }
         }
@@ -109,23 +213,29 @@ final class CandleController: ObservableObject {
         }
     }
 
-    private func configureAudio() throws {
-        guard !audioConfigured else { return }
+    private func playAudio() {
+        audioPlayer?.stop()
+        audioPlayer = nil
 
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
-        try session.setActive(true)
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
 
-        guard let url = Bundle.main.url(forResource: "fireplace", withExtension: "wav") else {
-            throw CandleError.audioMissing
+            guard let url = Bundle.main.url(forResource: mode.soundName, withExtension: mode.soundExtension) else {
+                throw CandleError.audioMissing
+            }
+
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.numberOfLoops = -1
+            player.volume = mode.soundVolume
+            player.prepareToPlay()
+            audioPlayer = player
+            player.play()
+        } catch {
+            // The torch remains useful if a bundled sound cannot be loaded.
+            audioPlayer = nil
         }
-
-        let player = try AVAudioPlayer(contentsOf: url)
-        player.numberOfLoops = -1
-        player.volume = 0.34
-        player.prepareToPlay()
-        audioPlayer = player
-        audioConfigured = true
     }
 
     private func setTorchLevel(_ level: Float) throws {

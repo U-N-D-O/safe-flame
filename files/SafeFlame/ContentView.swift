@@ -10,7 +10,7 @@ struct ContentView: View {
 
             RadialGradient(
                 colors: [
-                    Color.orange.opacity(candle.isRunning ? 0.12 : 0.035),
+                    candle.mode.accentColor.opacity(candle.isRunning ? 0.12 : 0.035),
                     Color.clear
                 ],
                 center: .center,
@@ -19,33 +19,55 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            Button {
-                candle.toggle()
-            } label: {
-                Image(systemName: candle.isRunning ? "stop.fill" : "flame.fill")
-                    .font(.system(size: 34, weight: .medium))
-                    .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
-                    .frame(width: 116, height: 116)
-                    .background {
-                        Circle()
-                            .fill(
-                                candle.isRunning
-                                    ? Color(red: 0.58, green: 0.16, blue: 0.05)
-                                    : Color(red: 1.0, green: 0.56, blue: 0.12)
-                            )
-                    }
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
-                    }
-                    .shadow(
-                        color: Color.orange.opacity(candle.isRunning ? 0.42 : 0.18),
-                        radius: candle.isRunning ? 34 : 18
-                    )
+            HStack(spacing: 22) {
+                modeArrow(systemName: "chevron.left", label: "Previous mood") {
+                    candle.selectPreviousMode()
+                }
+
+                Button {
+                    candle.toggle()
+                } label: {
+                    Image(systemName: candle.mode.iconName)
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
+                        .frame(width: 116, height: 116)
+                        .background {
+                            Circle()
+                                .fill(
+                                    candle.isRunning
+                                        ? candle.mode.accentColor.opacity(0.72)
+                                        : candle.mode.accentColor
+                                )
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                        }
+                        .shadow(
+                            color: candle.mode.accentColor.opacity(candle.isRunning ? 0.42 : 0.18),
+                            radius: candle.isRunning ? 34 : 18
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(candle.isRunning ? "Stop \(candle.mode.title)" : "Start \(candle.mode.title)")
+                .accessibilityHint("Controls the light and sound")
+
+                modeArrow(systemName: "chevron.right", label: "Next mood") {
+                    candle.selectNextMode()
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(candle.isRunning ? "Stop candle" : "Start candle")
-            .accessibilityHint("Controls the dim flickering light and fireplace sound")
         }
+    }
+
+    private func modeArrow(systemName: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .light))
+                .foregroundStyle(Color.white.opacity(0.48))
+                .frame(width: 36, height: 64)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }

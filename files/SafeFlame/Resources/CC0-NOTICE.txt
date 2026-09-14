@@ -3,4 +3,12 @@ fireplace.wav is the “Fireplace Sound loop” recording by PagDev.
 Source: https://opengameart.org/content/fireplace-sound-loop
 License: Creative Commons Zero (CC0 1.0)
 
-The sound is bundled locally and played on repeat by Safe Flame.
+The sounds are bundled locally and played on repeat by Safe Flame.
+
+candle.mp3 is "Sparkling Candle #1" by Joseph SARDIN / BigSoundBank.
+Source: https://bigsoundbank.com/sparkling-candle-1-s1278.html
+License: CC0 / public domain equivalent.
+
+nightlight.wav is "Sleep Talking / Loop / Fantasy / RPG / Sci-Fi" by KiluaBoy.
+Source: https://opengameart.org/content/sleep-talking-loop-fantasy-rpg-sci-fi
+License: Creative Commons Zero (CC0 1.0).
