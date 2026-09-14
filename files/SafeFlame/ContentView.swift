@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @ObservedObject var candle: CandleController
@@ -60,15 +61,24 @@ struct ContentView: View {
     @ViewBuilder
     private var modeIcon: some View {
         if let imageName = candle.mode.imageName {
-            Image(imageName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 66, height: 66)
+            if let path = Bundle.main.path(forResource: imageName, ofType: "png"),
+               let image = UIImage(contentsOfFile: path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 66, height: 66)
+            } else {
+                fallbackModeIcon
+            }
         } else {
-            Image(systemName: candle.mode.iconName)
-                .font(.system(size: 34, weight: .medium))
-                .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
+            fallbackModeIcon
         }
+    }
+
+    private var fallbackModeIcon: some View {
+        Image(systemName: candle.mode.iconName)
+            .font(.system(size: 34, weight: .medium))
+            .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
     }
 
     private func modeArrow(systemName: String, label: String, action: @escaping () -> Void) -> some View {

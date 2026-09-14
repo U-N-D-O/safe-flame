@@ -58,7 +58,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     var defaultTorchLevel: Float {
         switch self {
         case .fireplace: return 0.065
-        case .candle: return 0.055
+        case .candle: return 0.05
         case .moonlight: return 0.035
         }
     }
@@ -66,7 +66,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     var targetTorchLevels: ClosedRange<Float> {
         switch self {
         case .fireplace: return 0.042...0.095
-        case .candle: return 0.032...0.12
+        case .candle: return 0.04...0.09
         case .moonlight: return 0.022...0.05
         }
     }
@@ -100,7 +100,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     var airPulseDipLevels: ClosedRange<Float> {
         switch self {
         case .fireplace: return 0.026...0.043
-        case .candle: return 0.019...0.036
+        case .candle: return 0.034...0.042
         case .moonlight: return 0.022...0.05
         }
     }
@@ -108,7 +108,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     var airPulseBloomLevels: ClosedRange<Float> {
         switch self {
         case .fireplace: return 0.10...0.145
-        case .candle: return 0.095...0.15
+        case .candle: return 0.082...0.105
         case .moonlight: return 0.022...0.05
         }
     }
