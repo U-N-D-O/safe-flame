@@ -37,6 +37,12 @@ jobs:
           CODE_SIGNING_REQUIRED=NO
           build
 
+      - name: Bundle audio resource
+        run: |
+          app="device-build/Build/Products/Release-iphoneos/SafeFlame.app"
+          cp files/SafeFlame/Resources/fireplace.wav "$app/"
+          cp files/SafeFlame/Resources/CC0-NOTICE.txt "$app/"
+
       - name: Package unsigned IPA
         run: |
           mkdir -p "$RUNNER_TEMP/safe-flame-ipa/Payload"
