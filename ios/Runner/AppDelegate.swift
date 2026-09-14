@@ -18,7 +18,7 @@ import UIKit
 
     let channel = FlutterMethodChannel(
       name: "com.qila.safeflame/control",
-      binaryMessenger: engineBridge.applicationRegistrar.messenger
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     channel.setMethodCallHandler { [weak self] call, result in
       self?.safeFlame.handle(call, result: result)
