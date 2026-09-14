@@ -50,10 +50,21 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           script: |
+            # Give System UI time to finish booting before any screenshots or
+            # input events.  Hosted emulators can otherwise show a transient
+            # "System UI isn't responding" dialog in the evidence video.
+            adb wait-for-device
+            until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 2; done
+            sleep 20
+            adb shell settings put system screen_off_timeout 1800000 || true
+            adb shell wm dismiss-keyguard || true
+            adb shell am force-stop com.android.systemui || true
+            sleep 8
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.qila.safeflame android.permission.CAMERA
             adb shell pm grant com.qila.safeflame android.permission.POST_NOTIFICATIONS || true
-            adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
+            adb shell am start -W -n com.qila.safeflame/com.undu.safeflame.MainActivity
+            sleep 5
             mkdir -p review-frames
             for i in 0 1 2 3 4; do adb exec-out screencap -p > "review-frames/frame-$(printf '%04d' "$i").png"; sleep 1; done
             adb shell input tap 540 750
