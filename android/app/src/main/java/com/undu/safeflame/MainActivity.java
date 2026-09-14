@@ -233,6 +233,17 @@ public final class MainActivity extends Activity {
         super.onPause();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        boolean serviceRunning = getSharedPreferences("safe_flame_state", MODE_PRIVATE)
+                .getBoolean("running", false);
+        if (running != serviceRunning) {
+            running = serviceRunning;
+            updateControls();
+        }
+    }
+
     private void requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {

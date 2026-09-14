@@ -90,6 +90,10 @@ public final class FlameService extends Service {
             wakeLock.acquire();
         }
         running = true;
+        getSharedPreferences("safe_flame_state", MODE_PRIVATE)
+                .edit()
+                .putBoolean("running", true)
+                .apply();
         startAudio();
         handler.removeCallbacks(flicker);
         setTorch(mode == 2 ? 0.38f : 0.42f);
@@ -206,6 +210,10 @@ public final class FlameService extends Service {
 
     private void stopRunning() {
         running = false;
+        getSharedPreferences("safe_flame_state", MODE_PRIVATE)
+                .edit()
+                .putBoolean("running", false)
+                .apply();
         handler.removeCallbacks(flicker);
         turnTorchOff();
         stopAudio();
