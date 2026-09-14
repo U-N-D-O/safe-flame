@@ -38,11 +38,12 @@ jobs:
       - name: Run Safe Flame in an Android emulator and record the demo
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
+          api-level: 30
+          target: default
+          arch: x86
           profile: pixel_2
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          force-avd-creation: true
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
           disable-animations: true
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
