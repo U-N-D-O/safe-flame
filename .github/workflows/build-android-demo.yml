@@ -38,8 +38,8 @@ jobs:
       - name: Record the real Android foreground-service demo
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 28
-          target: default
+          api-level: 30
+          target: google_apis
           arch: x86
           profile: pixel_2
           cores: 4
