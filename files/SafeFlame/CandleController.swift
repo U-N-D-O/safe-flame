@@ -144,7 +144,8 @@ final class CandleController: ObservableObject {
 
     private var torch: AVCaptureDevice?
     private var flickerTask: Task<Void, Never>?
-    private var audioPlayer: AVAudioPlayer?
+    private var audioEngine: AVAudioEngine?
+    private var audioPlayerNode: AVAudioPlayerNode?
     private var savedBrightness: CGFloat?
 
     init() {
@@ -153,6 +154,8 @@ final class CandleController: ObservableObject {
 
     deinit {
         flickerTask?.cancel()
+        audioPlayerNode?.stop()
+        audioEngine?.stop()
     }
 
     func toggle() {
@@ -225,7 +228,7 @@ final class CandleController: ObservableObject {
         wakeFromSleepDimmer()
         flickerTask?.cancel()
         flickerTask = nil
-        audioPlayer?.stop()
+        stopAudio()
         isRunning = false
         UIApplication.shared.isIdleTimerDisabled = false
 
@@ -298,8 +301,7 @@ final class CandleController: ObservableObject {
     }
 
     private func playAudio() {
-        audioPlayer?.stop()
-        audioPlayer = nil
+        stopAudio()
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -310,16 +312,40 @@ final class CandleController: ObservableObject {
                 throw CandleError.audioMissing
             }
 
-            let player = try AVAudioPlayer(contentsOf: url)
-            player.numberOfLoops = -1
-            player.volume = mode.soundVolume
-            player.prepareToPlay()
-            audioPlayer = player
-            player.play()
+            let file = try AVAudioFile(forReading: url)
+            guard let buffer = AVAudioPCMBuffer(
+                pcmFormat: file.processingFormat,
+                frameCapacity: AVAudioFrameCount(file.length)
+            ) else {
+                throw CandleError.audioBufferUnavailable
+            }
+            try file.read(into: buffer)
+
+            let engine = AVAudioEngine()
+            let playerNode = AVAudioPlayerNode()
+            engine.attach(playerNode)
+            engine.connect(playerNode, to: engine.mainMixerNode, format: buffer.format)
+            engine.mainMixerNode.outputVolume = mode.soundVolume
+
+            // Buffer looping is scheduled by AVAudioEngine at the sample boundary,
+            // avoiding the tiny restart gap that AVAudioPlayer can introduce.
+            playerNode.scheduleBuffer(buffer, at: nil, options: .loops)
+            try engine.start()
+            playerNode.play()
+            audioEngine = engine
+            audioPlayerNode = playerNode
         } catch {
             // The torch remains useful if a bundled sound cannot be loaded.
-            audioPlayer = nil
+            stopAudio()
         }
+    }
+
+    private func stopAudio() {
+        audioPlayerNode?.stop()
+        audioEngine?.stop()
+        audioEngine?.reset()
+        audioPlayerNode = nil
+        audioEngine = nil
     }
 
     private func setTorchLevel(_ level: Float) throws {
@@ -337,4 +363,5 @@ final class CandleController: ObservableObject {
 
 private enum CandleError: Error {
     case audioMissing
+    case audioBufferUnavailable
 }
