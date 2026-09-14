@@ -1,0 +1,69 @@
+name: Build Safe Flame iOS IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          cd files
+          xcodegen generate
+
+      - name: Build unsigned device app
+        run: >-
+          xcodebuild
+          -project files/SafeFlame.xcodeproj
+          -scheme SafeFlame
+          -sdk iphoneos
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -derivedDataPath device-build
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/safe-flame-ipa/Payload"
+          cp -R device-build/Build/Products/Release-iphoneos/SafeFlame.app "$RUNNER_TEMP/safe-flame-ipa/Payload/"
+          ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/safe-flame-ipa/Payload" SafeFlame-unsigned.ipa
+
+      - name: Validate IPA metadata
+        run: |
+          app="$RUNNER_TEMP/safe-flame-ipa/Payload/SafeFlame.app"
+          test -f SafeFlame-unsigned.ipa
+          test -f "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist" | grep -qx "com.undu.safeflame"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Info.plist" | grep -qx "1.0"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Info.plist" | grep -qx "1"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-flame-ios-ipa
+          path: SafeFlame-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish direct IPA download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view safe-flame-latest >/dev/null 2>&1 || gh release create safe-flame-latest --title "Safe Flame latest iOS IPA" --notes "Unsigned IPA for AltServer or AltStore."
+          gh release upload safe-flame-latest SafeFlame-unsigned.ipa --clobber

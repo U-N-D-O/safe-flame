@@ -1,0 +1,6 @@
+fireplace.wav is the “Fireplace Sound loop” recording by PagDev.
+
+Source: https://opengameart.org/content/fireplace-sound-loop
+License: Creative Commons Zero (CC0 1.0)
+
+The sound is bundled locally and played on repeat by Safe Flame.

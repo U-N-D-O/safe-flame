@@ -1,0 +1,29 @@
+name: SafeFlame
+
+options:
+  bundleIdPrefix: com.undu
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  SafeFlame:
+    type: application
+    platform: iOS
+    sources:
+      - path: SafeFlame/SafeFlameApp.swift
+      - path: SafeFlame/ContentView.swift
+      - path: SafeFlame/CandleController.swift
+    resources:
+      - path: SafeFlame/Resources
+    info:
+      path: SafeFlame/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.undu.safeflame
+        PRODUCT_NAME: SafeFlame
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Manual
