@@ -57,6 +57,7 @@ jobs:
           name: safe-flame-google-play-release
           path: |
             android/app/build/outputs/bundle/release/app-release.aab
+            store/google-play/app-icon.png
             store/google-play/feature-graphic.jpg
           if-no-files-found: error
           retention-days: 30
