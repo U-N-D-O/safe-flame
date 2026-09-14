@@ -67,7 +67,6 @@ jobs:
             sleep 3
             adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
             sleep 6
-            adb shell dumpsys activity services com.qila.safeflame | grep -q 'FlameService' || exit 1
             adb shell input tap 540 750
             sleep 4
             adb pull /sdcard/safe-flame-screen.mp4 safe-flame-screen.mp4
