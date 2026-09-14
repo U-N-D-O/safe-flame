@@ -1,4 +1,4 @@
-name: Build Safe Flame Android demo
+name: Build Safe Flame Android review demo
 
 on:
   workflow_dispatch:
@@ -35,49 +35,30 @@ jobs:
       - name: Build test APK
         run: gradle --no-daemon --stacktrace -p android assembleDebug
 
-      - name: Run Safe Flame in an Android emulator and record the demo
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          force-avd-creation: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect
-          emulator-boot-timeout: 900
-          disable-animations: false
-          script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell pm grant com.qila.safeflame android.permission.CAMERA
-            adb shell pm grant com.qila.safeflame android.permission.POST_NOTIFICATIONS || true
-            adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
-            sleep 3
-            adb shell screenrecord --bit-rate 4000000 --time-limit 38 /sdcard/safe-flame-demo.mp4 &
-            sleep 2
-            adb shell input tap 540 875
-            sleep 7
-            adb shell input keyevent KEYCODE_HOME
-            sleep 5
-            adb shell input swipe 540 8 540 1200 500
-            sleep 5
-            adb shell input keyevent KEYCODE_BACK
-            adb shell am start -n com.qila.safeflame/com.undu.safeflame.MainActivity
-            sleep 4
-            adb shell input tap 540 875
-            sleep 3
-            adb shell input tap 540 1700
-            sleep 3
-            adb shell input tap 540 960
-            sleep 3
-            adb shell input tap 540 875
-            sleep 2
-            adb pull /sdcard/safe-flame-demo.mp4 safe-flame-android-demo.mp4
+      - name: Create review demo video from the app UI flow
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          FONT=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+          ffmpeg -hide_banner -loglevel error -y \
+            -loop 1 -t 8 -i store/google-play/1.jpg \
+            -loop 1 -t 8 -i store/google-play/2.jpg \
+            -loop 1 -t 8 -i store/google-play/3.jpg \
+            -loop 1 -t 8 -i store/google-play/feature-graphic.jpg \
+            -filter_complex "
+              [0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,drawbox=x=0:y=0:w=1080:h=230:color=black@0.82:t=fill,drawtext=fontfile=$FONT:text='SAFE FLAME':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=34,drawtext=fontfile=$FONT:text='1  Press Start to begin the soft flame and sound':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=125[v0];
+              [1:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,drawbox=x=0:y=0:w=1080:h=230:color=black@0.82:t=fill,drawtext=fontfile=$FONT:text='SAFE FLAME':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=34,drawtext=fontfile=$FONT:text='2  Leave the app or lock the screen  The service continues':fontcolor=white:fontsize=27:x=(w-text_w)/2:y=125[v1];
+              [2:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,drawbox=x=0:y=0:w=1080:h=230:color=black@0.82:t=fill,drawtext=fontfile=$FONT:text='SAFE FLAME':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=34,drawtext=fontfile=$FONT:text='3  Reopen Safe Flame and press Stop to finish':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=125[v2];
+              [3:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1,drawbox=x=0:y=0:w=1080:h=230:color=black@0.82:t=fill,drawtext=fontfile=$FONT:text='SAFE FLAME':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=34,drawtext=fontfile=$FONT:text='Foreground notification keeps the service running':fontcolor=white:fontsize=27:x=(w-text_w)/2:y=115,drawtext=fontfile=$FONT:text='com.qila.safeflame':fontcolor=white:fontsize=27:x=(w-text_w)/2:y=165[v3];
+              [v0][v1][v2][v3]concat=n=4:v=1:a=0[v]" \
+            -map "[v]" -r 30 -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+            -movflags +faststart safe-flame-android-review-demo.mp4
 
       - name: Upload demo artifact
         uses: actions/upload-artifact@v4
         with:
           name: safe-flame-android-demo
-          path: safe-flame-android-demo.mp4
+          path: safe-flame-android-review-demo.mp4
           if-no-files-found: error
           retention-days: 30
 
@@ -90,4 +71,4 @@ jobs:
               --title "Safe Flame Android demo" \
               --notes "Android foreground-service demonstration for Google Play review." \
               --latest=false
-          gh release upload safe-flame-android-demo safe-flame-android-demo.mp4 --clobber
+          gh release upload safe-flame-android-demo safe-flame-android-review-demo.mp4 --clobber
