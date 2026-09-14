@@ -54,9 +54,15 @@ jobs:
           app="$RUNNER_TEMP/safe-flame-ipa/Payload/SafeFlame.app"
           test -f SafeFlame-unsigned.ipa
           test -f "$app/Info.plist"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist" | grep -qx "com.undu.safeflame"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Info.plist" | grep -qx "1.0"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Info.plist" | grep -qx "2"
+          bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
+          short_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Info.plist")
+          build_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Info.plist")
+          echo "Bundle ID: $bundle_id"
+          echo "Short version: $short_version"
+          echo "Build version: $build_version"
+          test "$bundle_id" = "com.undu.safeflame"
+          test "$short_version" = "1.0"
+          test "$build_version" = "2"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
