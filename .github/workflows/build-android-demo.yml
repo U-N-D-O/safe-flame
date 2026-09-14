@@ -38,13 +38,13 @@ jobs:
       - name: Record the real Android foreground-service demo
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
+          api-level: 28
+          target: default
+          arch: x86
           profile: pixel_2
           cores: 4
-          ram-size: 4096M
-          heap-size: 512M
+          ram-size: 2048M
+          heap-size: 256M
           force-avd-creation: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect
           emulator-boot-timeout: 900
