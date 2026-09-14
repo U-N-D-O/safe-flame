@@ -106,7 +106,7 @@ final class CandleController: ObservableObject {
         guard !audioConfigured else { return }
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .ambient, options: [.mixWithOthers])
+        try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
         try session.setActive(true)
 
         guard let url = Bundle.main.url(forResource: "fireplace", withExtension: "wav") else {
