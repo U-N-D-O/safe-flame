@@ -39,8 +39,8 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: default
-          arch: x86
+          target: google_apis
+          arch: x86_64
           profile: pixel_2
           force-avd-creation: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
