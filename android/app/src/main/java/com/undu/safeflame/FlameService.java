@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 
 import java.io.IOException;
 import java.util.Random;
@@ -31,6 +32,7 @@ public final class FlameService extends Service {
     private String cameraId;
     private int maximumTorchStrength = 1;
     private MediaPlayer audioPlayer;
+    private PowerManager.WakeLock wakeLock;
     private int mode;
     private boolean running;
 
@@ -56,19 +58,37 @@ public final class FlameService extends Service {
     public void onCreate() {
         super.onCreate();
         cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "SafeFlame::Flicker");
+            wakeLock.setReferenceCounted(false);
+        }
+        mode = getSharedPreferences("safe_flame_state", MODE_PRIVATE)
+                .getInt("mode", 0);
         findTorchCamera();
         createNotificationChannel();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || ACTION_STOP.equals(intent.getAction())) {
+        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             stopRunning();
             return START_NOT_STICKY;
         }
 
-        mode = intent.getIntExtra(EXTRA_MODE, 0);
+        if (intent != null && intent.hasExtra(EXTRA_MODE)) {
+            mode = intent.getIntExtra(EXTRA_MODE, mode);
+            getSharedPreferences("safe_flame_state", MODE_PRIVATE)
+                    .edit()
+                    .putInt("mode", mode)
+                    .apply();
+        }
         startForegroundSafely();
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
         running = true;
         startAudio();
         handler.removeCallbacks(flicker);
@@ -157,6 +177,7 @@ public final class FlameService extends Service {
         try {
             android.content.res.AssetFileDescriptor descriptor = getAssets().openFd(fileName);
             MediaPlayer player = new MediaPlayer();
+            player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
             player.setDataSource(descriptor.getFileDescriptor(), descriptor.getStartOffset(), descriptor.getLength());
             descriptor.close();
             player.setLooping(true);
@@ -188,6 +209,9 @@ public final class FlameService extends Service {
         handler.removeCallbacks(flicker);
         turnTorchOff();
         stopAudio();
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
