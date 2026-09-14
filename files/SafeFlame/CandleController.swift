@@ -27,10 +27,7 @@ final class CandleController: ObservableObject {
         guard let torch, torch.hasTorch, torch.isTorchAvailable else { return }
 
         do {
-            try configureAudio()
             try setTorchLevel(0.065)
-            audioPlayer?.currentTime = 0
-            audioPlayer?.play()
         } catch {
             return
         }
@@ -38,6 +35,16 @@ final class CandleController: ObservableObject {
         isRunning = true
         UIApplication.shared.isIdleTimerDisabled = true
         startFlickerLoopIfNeeded()
+
+        // The torch is the primary feature. If audio is unavailable for any
+        // reason, the candle light should still start and remain usable.
+        do {
+            try configureAudio()
+            audioPlayer?.currentTime = 0
+            audioPlayer?.play()
+        } catch {
+            audioPlayer = nil
+        }
     }
 
     func stop() {

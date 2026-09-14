@@ -15,7 +15,8 @@ targets:
       - path: SafeFlame/ContentView.swift
       - path: SafeFlame/CandleController.swift
     resources:
-      - path: SafeFlame/Resources
+      - path: SafeFlame/Resources/fireplace.wav
+      - path: SafeFlame/Resources/CC0-NOTICE.txt
     info:
       path: SafeFlame/Info.plist
     settings:
