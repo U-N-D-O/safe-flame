@@ -11,7 +11,7 @@ struct ContentView: View {
 
             RadialGradient(
                 colors: [
-                    candle.mode.accentColor.opacity(candle.isRunning ? 0.12 : 0.035),
+                    Color(red: 0.12, green: 0.16, blue: 0.23).opacity(candle.isRunning ? 0.22 : 0.12),
                     Color.clear
                 ],
                 center: .center,
@@ -32,19 +32,51 @@ struct ContentView: View {
                         .frame(width: 116, height: 116)
                         .background {
                             Circle()
-                                .fill(
-                                    candle.isRunning
-                                        ? candle.mode.accentColor.opacity(0.72)
-                                        : candle.mode.accentColor
-                                )
+                                .fill(Color(red: 0.075, green: 0.105, blue: 0.16))
+                                .overlay {
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [
+                                                    Color.white.opacity(0.11),
+                                                    Color.clear,
+                                                    Color.black.opacity(0.22)
+                                                ],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                }
                         }
                         .overlay {
                             Circle()
-                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                                .overlay {
+                                    Circle()
+                                        .stroke(
+                                            candle.isRunning
+                                                ? candle.mode.accentColor.opacity(0.42)
+                                                : Color.white.opacity(0.05),
+                                            lineWidth: 1.5
+                                        )
+                                        .padding(3)
+                                }
                         }
                         .shadow(
-                            color: candle.mode.accentColor.opacity(candle.isRunning ? 0.42 : 0.18),
-                            radius: candle.isRunning ? 34 : 18
+                            color: Color.black.opacity(0.82),
+                            radius: 16,
+                            x: 9,
+                            y: 10
+                        )
+                        .shadow(
+                            color: Color.white.opacity(0.07),
+                            radius: 11,
+                            x: -7,
+                            y: -7
+                        )
+                        .shadow(
+                            color: candle.mode.accentColor.opacity(candle.isRunning ? 0.22 : 0.06),
+                            radius: candle.isRunning ? 24 : 12
                         )
                 }
                 .buttonStyle(.plain)
@@ -65,8 +97,18 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 15, weight: .light))
-                            .foregroundStyle(Color.white.opacity(0.34))
+                            .foregroundStyle(Color.white.opacity(0.42))
                             .frame(width: 44, height: 44)
+                            .background {
+                                Circle()
+                                    .fill(Color(red: 0.075, green: 0.105, blue: 0.16))
+                            }
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            }
+                            .shadow(color: Color.black.opacity(0.7), radius: 8, x: 5, y: 6)
+                            .shadow(color: Color.white.opacity(0.05), radius: 6, x: -4, y: -4)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -109,7 +151,7 @@ struct ContentView: View {
     private var fallbackModeIcon: some View {
         Image(systemName: candle.mode.iconName)
             .font(.system(size: 34, weight: .medium))
-            .foregroundStyle(candle.isRunning ? Color.white : Color.black.opacity(0.78))
+            .foregroundStyle(Color.white.opacity(candle.isRunning ? 0.96 : 0.78))
     }
 
     private func modeArrow(systemName: String, label: String, action: @escaping () -> Void) -> some View {

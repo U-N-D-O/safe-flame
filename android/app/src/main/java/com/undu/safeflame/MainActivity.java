@@ -15,7 +15,6 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -69,7 +68,7 @@ public final class MainActivity extends Activity {
         controls.setGravity(Gravity.CENTER_VERTICAL);
         addArrow(controls, "‹", "Previous mood", -1);
         buildFlameButton();
-        controls.addView(flameButton);
+        controls.addView(flameButton, new LinearLayout.LayoutParams(dp(136), dp(136)));
         addArrow(controls, "›", "Next mood", 1);
         content.addView(controls, new LinearLayout.LayoutParams(-1, dp(156)));
 
@@ -89,7 +88,14 @@ public final class MainActivity extends Activity {
         lockButton.setImageResource(android.R.drawable.ic_lock_lock);
         lockButton.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
         lockButton.setAlpha(0.42f);
-        lockButton.setBackgroundColor(Color.TRANSPARENT);
+        GradientDrawable lockBackground = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(39, 53, 73), Color.rgb(12, 20, 33)});
+        lockBackground.setShape(GradientDrawable.OVAL);
+        lockBackground.setStroke(dp(1), Color.argb(28, 255, 255, 255));
+        lockButton.setBackground(lockBackground);
+        lockButton.setElevation(dp(5));
+        lockButton.setPadding(dp(12), dp(12), dp(12), dp(12));
         lockButton.setContentDescription("Dim screen");
         lockButton.setOnClickListener(view -> dimScreen());
         LinearLayout.LayoutParams lockParams = new LinearLayout.LayoutParams(dp(48), dp(48));
@@ -114,7 +120,9 @@ public final class MainActivity extends Activity {
         flameButton = new FrameLayout(this);
         GradientDrawable background = new GradientDrawable();
         background.setShape(GradientDrawable.OVAL);
-        background.setColor(Color.rgb(255, 166, 60));
+        background.setColors(new int[]{Color.rgb(40, 54, 75), Color.rgb(11, 19, 32)});
+        background.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        background.setStroke(dp(1), Color.argb(42, 255, 255, 255));
         flameButton.setBackground(background);
         flameButton.setElevation(dp(12));
         flameButton.setContentDescription("Start Fireplace");
@@ -124,6 +132,7 @@ public final class MainActivity extends Activity {
         logo.setImageResource(R.drawable.safe_flame_logo);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setPadding(dp(25), dp(25), dp(25), dp(25));
+        logo.setAlpha(0.94f);
         flameButton.addView(logo, new FrameLayout.LayoutParams(-1, -1));
     }
 
@@ -246,7 +255,7 @@ public final class MainActivity extends Activity {
             float cy = getHeight() * 0.5f;
             paint.setShader(new RadialGradient(
                     cx, cy, Math.max(getWidth(), getHeight()) * 0.7f,
-                    new int[]{Color.rgb(39, 24, 22), Color.rgb(3, 10, 24), Color.BLACK},
+                    new int[]{Color.rgb(20, 29, 43), Color.rgb(3, 10, 24), Color.BLACK},
                     new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
             canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
             paint.setShader(null);
