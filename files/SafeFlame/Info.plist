@@ -8,6 +8,8 @@
 	<string>1</string>
 	<key>CFBundleDisplayName</key>
 	<string>Safe Flame</string>
+	<key>QILADeveloperName</key>
+	<string>QILA Modus</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
