@@ -122,6 +122,12 @@ struct ContentView: View {
                 Color.black
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                candle.wakeFromSleepDimmer()
+                            }
+                    )
                     .onTapGesture {
                         candle.wakeFromSleepDimmer()
                     }

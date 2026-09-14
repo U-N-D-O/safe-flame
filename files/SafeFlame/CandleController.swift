@@ -246,6 +246,10 @@ final class CandleController: ObservableObject {
     }
 
     func scenePhaseChanged(to phase: ScenePhase) {
+        if phase != .active, isSleepDimmed {
+            wakeFromSleepDimmer()
+        }
+
         guard isRunning else { return }
 
         if phase == .active {

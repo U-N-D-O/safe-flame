@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -108,7 +109,12 @@ public final class MainActivity extends Activity {
         dimOverlay.setVisibility(View.GONE);
         dimOverlay.setClickable(true);
         dimOverlay.setContentDescription("Wake screen");
-        dimOverlay.setOnClickListener(view -> wakeScreen());
+        dimOverlay.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                wakeScreen();
+            }
+            return true;
+        });
         root.addView(dimOverlay, new FrameLayout.LayoutParams(-1, -1));
 
         setContentView(root);
@@ -218,6 +224,13 @@ public final class MainActivity extends Activity {
         savedBrightness = -1f;
         dimmed = false;
         dimOverlay.setVisibility(View.GONE);
+    }
+
+    @Override
+    protected void onPause() {
+        // Leaving the app must never leave the system brightness dimmed.
+        wakeScreen();
+        super.onPause();
     }
 
     private void requestNotificationPermissionIfNeeded() {
