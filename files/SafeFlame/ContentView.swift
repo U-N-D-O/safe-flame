@@ -55,6 +55,37 @@ struct ContentView: View {
                     candle.selectNextMode()
                 }
             }
+
+            if candle.isRunning && !candle.isSleepDimmed {
+                VStack {
+                    Spacer()
+
+                    Button {
+                        candle.enterSleepDimmer()
+                    } label: {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 15, weight: .light))
+                            .foregroundStyle(Color.white.opacity(0.34))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dim screen")
+                    .accessibilityHint("Dims the screen while the flame keeps running. Tap anywhere to wake it.")
+                    .padding(.bottom, 18)
+                }
+            }
+
+            if candle.isSleepDimmed {
+                Color.black
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        candle.wakeFromSleepDimmer()
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Wake screen")
+            }
         }
     }
 

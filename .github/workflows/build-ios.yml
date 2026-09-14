@@ -43,7 +43,7 @@ jobs:
           cp files/SafeFlame/Resources/fireplace.wav "$app/"
           cp files/SafeFlame/Resources/candle.wav "$app/"
           cp files/SafeFlame/Resources/nightlight.wav "$app/"
-          cp files/SafeFlame/Resources/Candle.png "$app/"
+          cp files/SafeFlame/Resources/candle.png "$app/"
           cp files/SafeFlame/Resources/moon.png "$app/"
           cp files/SafeFlame/Resources/CC0-NOTICE.txt "$app/"
 

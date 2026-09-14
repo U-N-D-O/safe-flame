@@ -6,4 +6,4 @@ License: Creative Commons Zero (CC0 1.0)
 The sounds and icons are bundled locally and used by Safe Flame.
 
 candle.wav and nightlight.wav were supplied by the Safe Flame project owner.
-Candle.png and moon.png were supplied by the Safe Flame project owner.
+candle.png and moon.png were supplied by the Safe Flame project owner.

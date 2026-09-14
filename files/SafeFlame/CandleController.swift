@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import UIKit
 
 enum FlameMode: Int, CaseIterable, Identifiable {
     case fireplace
@@ -27,7 +28,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     var imageName: String? {
         switch self {
         case .fireplace: return nil
-        case .candle: return "Candle"
+        case .candle: return "candle"
         case .moonlight: return "moon"
         }
     }
@@ -41,10 +42,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
     }
 
     var soundExtension: String {
-        switch self {
-        case .fireplace, .moonlight: return "wav"
-        case .candle: return "mp3"
-        }
+        return "wav"
     }
 
     var soundVolume: Float {
@@ -142,10 +140,12 @@ enum FlameMode: Int, CaseIterable, Identifiable {
 final class CandleController: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var mode: FlameMode = .fireplace
+    @Published private(set) var isSleepDimmed = false
 
     private var torch: AVCaptureDevice?
     private var flickerTask: Task<Void, Never>?
     private var audioPlayer: AVAudioPlayer?
+    private var savedBrightness: CGFloat?
 
     init() {
         torch = AVCaptureDevice.default(for: .video)
@@ -157,6 +157,25 @@ final class CandleController: ObservableObject {
 
     func toggle() {
         isRunning ? stop() : start()
+    }
+
+    func toggleSleepDimmer() {
+        isSleepDimmed ? wakeFromSleepDimmer() : enterSleepDimmer()
+    }
+
+    func enterSleepDimmer() {
+        guard isRunning, !isSleepDimmed else { return }
+        savedBrightness = UIScreen.main.brightness
+        UIScreen.main.brightness = 0.01
+        isSleepDimmed = true
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    func wakeFromSleepDimmer() {
+        guard isSleepDimmed else { return }
+        UIScreen.main.brightness = savedBrightness ?? 0.5
+        savedBrightness = nil
+        isSleepDimmed = false
     }
 
     func selectPreviousMode() {
@@ -203,6 +222,7 @@ final class CandleController: ObservableObject {
     func stop() {
         guard isRunning || flickerTask != nil else { return }
 
+        wakeFromSleepDimmer()
         flickerTask?.cancel()
         flickerTask = nil
         audioPlayer?.stop()
