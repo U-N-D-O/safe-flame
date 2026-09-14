@@ -43,8 +43,9 @@ jobs:
           arch: x86_64
           profile: pixel_2
           force-avd-creation: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
-          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect
+          emulator-boot-timeout: 900
+          disable-animations: false
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.qila.safeflame android.permission.CAMERA
