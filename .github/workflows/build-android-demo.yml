@@ -57,9 +57,6 @@ jobs:
             until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 2; done
             sleep 20
             adb shell settings put system screen_off_timeout 1800000 || true
-            adb shell wm dismiss-keyguard || true
-            adb shell am force-stop com.android.systemui || true
-            sleep 8
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell pm grant com.qila.safeflame android.permission.CAMERA
             adb shell pm grant com.qila.safeflame android.permission.POST_NOTIFICATIONS || true
