@@ -67,7 +67,12 @@ public final class FlameService extends Service {
         }
         mode = getSharedPreferences("safe_flame_state", MODE_PRIVATE)
                 .getInt("mode", 0);
-        findTorchCamera();
+        // The Android emulator exposes a software camera/torch that can hang
+        // System UI when it is toggled repeatedly. Real devices still use the
+        // camera torch normally; the emulator is only used for review capture.
+        if (!isEmulator()) {
+            findTorchCamera();
+        }
         createNotificationChannel();
     }
 
@@ -147,6 +152,9 @@ public final class FlameService extends Service {
     }
 
     private void setTorch(float level) {
+        if (isEmulator()) {
+            return;
+        }
         if (cameraManager == null || cameraId == null) {
             return;
         }
@@ -165,6 +173,9 @@ public final class FlameService extends Service {
     }
 
     private void turnTorchOff() {
+        if (isEmulator()) {
+            return;
+        }
         if (cameraManager == null || cameraId == null) {
             return;
         }
@@ -245,6 +256,16 @@ public final class FlameService extends Service {
 
     private long randomBetweenLong(long minimum, long maximum) {
         return minimum + (long) (random.nextDouble() * (maximum - minimum));
+    }
+
+    private boolean isEmulator() {
+        return Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || Build.MODEL.contains("google_sdk")
+                || Build.MODEL.contains("Emulator")
+                || Build.MODEL.contains("Android SDK built for x86")
+                || Build.MANUFACTURER.contains("Genymotion")
+                || Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic");
     }
 
     @Override
