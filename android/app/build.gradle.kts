@@ -1,5 +1,8 @@
 plugins {
     id("com.android.application")
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
 }
 
 val keystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
@@ -8,20 +11,33 @@ val keyAliasValue = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val keyPasswordValue = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
 
 android {
-    namespace = "com.undu.safeflame"
-    compileSdk = 36
+    namespace = "com.qila.safeflame"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
 
     defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.qila.safeflame"
-        minSdk = 26
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
         create("release") {
-            if (keystorePath != null) {
+            if (keystorePath != null && keystorePassword != null && keyAliasValue != null && keyPasswordValue != null) {
                 storeFile = file(keystorePath)
                 storePassword = keystorePassword
                 keyAlias = keyAliasValue
@@ -32,7 +48,6 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -42,4 +57,8 @@ android {
     }
 
     sourceSets["main"].assets.srcDir(file("../../files/SafeFlame/Resources"))
+}
+
+flutter {
+    source = "../.."
 }

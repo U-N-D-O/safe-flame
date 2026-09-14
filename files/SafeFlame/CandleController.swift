@@ -27,7 +27,7 @@ enum FlameMode: Int, CaseIterable, Identifiable {
 
     var imageName: String? {
         switch self {
-        case .fireplace: return nil
+        case .fireplace: return "fireplace"
         case .candle: return "candle"
         case .moonlight: return "moon"
         }

@@ -19,10 +19,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          gradle-version: "8.13"
+          channel: stable
+          flutter-version: "3.41.9"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -49,14 +50,15 @@ jobs:
           test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo "Missing ANDROID_KEYSTORE_PASSWORD repository secret" >&2; exit 1; }
           test -n "$ANDROID_KEY_ALIAS" || { echo "Missing ANDROID_KEY_ALIAS repository secret" >&2; exit 1; }
           test -n "$ANDROID_KEY_PASSWORD" || { echo "Missing ANDROID_KEY_PASSWORD repository secret" >&2; exit 1; }
-          gradle --no-daemon --stacktrace -p android bundleRelease
+          flutter pub get
+          flutter build appbundle --release
 
       - name: Upload Play release bundle and listing graphic
         uses: actions/upload-artifact@v4
         with:
           name: safe-flame-google-play-release
           path: |
-            android/app/build/outputs/bundle/release/app-release.aab
+            build/app/outputs/bundle/release/app-release.aab
             store/google-play/app-icon.png
             store/google-play/feature-graphic.jpg
           if-no-files-found: error

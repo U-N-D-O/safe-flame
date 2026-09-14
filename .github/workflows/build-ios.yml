@@ -16,46 +16,26 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.41.9"
 
-      - name: Generate Xcode project
+      - name: Build unsigned device app from the shared Flutter project
         run: |
-          cd files
-          xcodegen generate
-
-      - name: Build unsigned device app
-        run: >-
-          xcodebuild
-          -project files/SafeFlame.xcodeproj
-          -scheme SafeFlame
-          -sdk iphoneos
-          -configuration Release
-          -destination 'generic/platform=iOS'
-          -derivedDataPath device-build
-          CODE_SIGNING_ALLOWED=NO
-          CODE_SIGNING_REQUIRED=NO
-          build
-
-      - name: Bundle audio resource
-        run: |
-          app="device-build/Build/Products/Release-iphoneos/SafeFlame.app"
-          cp files/SafeFlame/Resources/fireplace.wav "$app/"
-          cp files/SafeFlame/Resources/candle.wav "$app/"
-          cp files/SafeFlame/Resources/nightlight.wav "$app/"
-          cp files/SafeFlame/Resources/candle.png "$app/"
-          cp files/SafeFlame/Resources/moon.png "$app/"
-          cp files/SafeFlame/Resources/CC0-NOTICE.txt "$app/"
+          flutter pub get
+          flutter build ios --release --no-codesign
 
       - name: Package unsigned IPA
         run: |
           mkdir -p "$RUNNER_TEMP/safe-flame-ipa/Payload"
-          cp -R device-build/Build/Products/Release-iphoneos/SafeFlame.app "$RUNNER_TEMP/safe-flame-ipa/Payload/"
+          cp -R build/ios/iphoneos/Runner.app "$RUNNER_TEMP/safe-flame-ipa/Payload/"
           ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/safe-flame-ipa/Payload" SafeFlame-unsigned.ipa
 
       - name: Validate IPA metadata
         run: |
-          app="$RUNNER_TEMP/safe-flame-ipa/Payload/SafeFlame.app"
+          app="$RUNNER_TEMP/safe-flame-ipa/Payload/Runner.app"
           test -f SafeFlame-unsigned.ipa
           test -f "$app/Info.plist"
           bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
@@ -64,8 +44,8 @@ jobs:
           echo "Bundle ID: $bundle_id"
           echo "Short version: $short_version"
           echo "Build version: $build_version"
-          test "$bundle_id" = "com.undu.safeflame"
-          test "$short_version" = "1.0"
+          test "$bundle_id" = "com.qila.safeflame"
+          test "$short_version" = "1.0.0"
           test "$build_version" = "1"
 
       - name: Upload IPA artifact

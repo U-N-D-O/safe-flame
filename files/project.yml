@@ -21,6 +21,7 @@ targets:
       - path: SafeFlame/Resources/nightlight.wav
       - path: SafeFlame/Resources/candle.png
       - path: SafeFlame/Resources/moon.png
+      - path: SafeFlame/Resources/fireplace.png
       - path: SafeFlame/Resources/CC0-NOTICE.txt
     info:
       path: SafeFlame/Info.plist
