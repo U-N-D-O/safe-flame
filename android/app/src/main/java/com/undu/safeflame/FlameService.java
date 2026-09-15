@@ -38,6 +38,9 @@ public final class FlameService extends Service {
     private boolean running;
     private long motionStartedAt;
     private double motionPhase;
+    private FlameDrift quickMotion = new FlameDrift(0.35);
+    private FlameDrift bodyMotion = new FlameDrift(1.3);
+    private FlameDrift slowMotion = new FlameDrift(4.7);
     private double gustStartedAt;
     private double gustDuration = 1;
     private double gustDirection = 1;
@@ -49,22 +52,29 @@ public final class FlameService extends Service {
                 return;
             }
             double elapsed = (SystemClock.elapsedRealtime() - motionStartedAt) / 1000.0;
-            double speed = mode == 2 ? 0.32 : mode == 1 ? 0.28 : 0.38;
-            double t = elapsed * speed;
+            double t = elapsed * 0.32;
             double p = motionPhase;
             // Same continuously moving waveform as the iOS controller.
             double drift = 0.55 * Math.sin(1.17 * t + p + 0.32 * Math.sin(0.37 * t + p))
                     + 0.30 * Math.sin(2.71 * t + 1.7 * p + 0.22 * Math.sin(0.61 * t))
                     + 0.15 * Math.sin(5.13 * t + 0.7 * p);
+            if (mode != 2) {
+                double quickWeight = mode == 1 ? 0.10 : 0.25;
+                double bodyWeight = mode == 1 ? 0.55 : 0.60;
+                double slowWeight = mode == 1 ? 0.35 : 0.15;
+                drift = Math.tanh(1.8 * (quickWeight * quickMotion.value(elapsed)
+                        + bodyWeight * bodyMotion.value(elapsed)
+                        + slowWeight * slowMotion.value(elapsed)));
+            }
             if (elapsed > gustStartedAt + gustDuration) {
-                gustStartedAt = elapsed + 15 + random.nextDouble() * 15;
-                gustDuration = 1.8 + random.nextDouble() * 1.4;
+                gustStartedAt = elapsed + (mode == 1 ? 8 + random.nextDouble() * 12 : 6 + random.nextDouble() * 8);
+                gustDuration = mode == 1 ? 1.2 + random.nextDouble() * 1.4 : 0.9 + random.nextDouble() * 1.2;
                 gustDirection = random.nextBoolean() ? 1 : -1;
             }
             double progress = Math.max(0, Math.min(1, (elapsed - gustStartedAt) / gustDuration));
-            double gustStrength = mode == 2 ? 0 : mode == 1 ? 0.14 : 0.18;
+            double gustStrength = mode == 2 ? 0 : mode == 1 ? 0.13 : 0.22;
             double pulse = gustStrength * Math.pow(Math.sin(Math.PI * progress), 4);
-            double driftStrength = mode == 2 ? 1 : mode == 1 ? 0.18 : 0.24;
+            double driftStrength = mode == 2 ? 1 : mode == 1 ? 0.50 : 0.95;
             double motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection;
             double minimum = mode == 2 ? 0.30 : 0.22;
             double maximum = mode == 2 ? 0.48 : 0.58;
@@ -126,8 +136,11 @@ public final class FlameService extends Service {
         handler.removeCallbacks(flicker);
         motionStartedAt = SystemClock.elapsedRealtime();
         motionPhase = random.nextDouble() * 2 * Math.PI;
-        gustStartedAt = 15 + random.nextDouble() * 15;
-        gustDuration = 1.8 + random.nextDouble() * 1.4;
+        quickMotion = new FlameDrift(mode == 1 ? 0.65 : 0.35);
+        bodyMotion = new FlameDrift(mode == 1 ? 2.0 : 1.3);
+        slowMotion = new FlameDrift(mode == 1 ? 5.3 : 4.7);
+        gustStartedAt = mode == 1 ? 8 + random.nextDouble() * 12 : 6 + random.nextDouble() * 8;
+        gustDuration = mode == 1 ? 1.2 + random.nextDouble() * 1.4 : 0.9 + random.nextDouble() * 1.2;
         setTorch(mode == 2 ? 0.38f : 0.42f);
         handler.post(flicker);
         return START_STICKY;
@@ -286,6 +299,36 @@ public final class FlameService extends Service {
                 || Build.MODEL.contains("Android SDK built for x86")
                 || Build.MANUFACTURER.contains("Genymotion")
                 || Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic");
+    }
+
+    // Same cubic B-spline noise as iOS: continuous value, velocity and
+    // acceleration across random control points, with no stops at knots.
+    private final class FlameDrift {
+        private final double interval;
+        private int segment;
+        private final double[] points = new double[4];
+
+        FlameDrift(double interval) {
+            this.interval = interval;
+            for (int i = 0; i < points.length; i++) points[i] = random.nextDouble() * 2 - 1;
+        }
+
+        double value(double time) {
+            double position = Math.max(0, time) / interval;
+            int nextSegment = (int) position;
+            while (segment < nextSegment) {
+                System.arraycopy(points, 1, points, 0, 3);
+                points[3] = random.nextDouble() * 2 - 1;
+                segment++;
+            }
+            double u = position - segment;
+            double u2 = u * u;
+            double u3 = u2 * u;
+            return (Math.pow(1 - u, 3) * points[0]
+                    + (3 * u3 - 6 * u2 + 4) * points[1]
+                    + (-3 * u3 + 3 * u2 + 3 * u + 1) * points[2]
+                    + u3 * points[3]) / 6;
+        }
     }
 
     @Override

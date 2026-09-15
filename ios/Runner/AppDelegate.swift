@@ -33,6 +33,9 @@ private final class SafeFlamePlatformController: NSObject {
   private var flickerTimer: Timer?
   private var motionStartedAt: TimeInterval = 0
   private var motionPhase: Double = 0
+  private var quickMotion = FlameDrift(interval: 0.35)
+  private var bodyMotion = FlameDrift(interval: 1.3)
+  private var slowMotion = FlameDrift(interval: 4.7)
   private var gustStartedAt: Double = 0
   private var gustDuration: Double = 1
   private var gustDirection: Double = 1
@@ -99,8 +102,11 @@ private final class SafeFlamePlatformController: NSObject {
     guard running else { return }
     motionStartedAt = ProcessInfo.processInfo.systemUptime
     motionPhase = Double.random(in: 0...(2 * .pi))
-    gustStartedAt = Double.random(in: 15...30)
-    gustDuration = Double.random(in: 1.8...3.2)
+    quickMotion = FlameDrift(interval: mode == 1 ? 0.65 : 0.35)
+    bodyMotion = FlameDrift(interval: mode == 1 ? 2.0 : 1.3)
+    slowMotion = FlameDrift(interval: mode == 1 ? 5.3 : 4.7)
+    gustStartedAt = mode == 1 ? Double.random(in: 8...20) : Double.random(in: 6...14)
+    gustDuration = mode == 1 ? Double.random(in: 1.2...2.6) : Double.random(in: 0.9...2.1)
     gustDirection = 1
     let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
       self?.flicker()
@@ -112,25 +118,32 @@ private final class SafeFlamePlatformController: NSObject {
   private func flicker() {
     guard running else { return }
     let elapsed = ProcessInfo.processInfo.systemUptime - motionStartedAt
-    let speed = mode == 2 ? 0.32 : mode == 1 ? 0.28 : 0.38
-    let t = elapsed * speed
+    let t = elapsed * 0.32
     let p = motionPhase
     // Overlapping, phase-modulated waves never wait at a target brightness.
     // Keep this normalized motion identical to FlameService on Android.
-    let drift = 0.55 * sin(1.17 * t + p + 0.32 * sin(0.37 * t + p))
+    var drift = 0.55 * sin(1.17 * t + p + 0.32 * sin(0.37 * t + p))
       + 0.30 * sin(2.71 * t + 1.7 * p + 0.22 * sin(0.61 * t))
       + 0.15 * sin(5.13 * t + 0.7 * p)
+    if mode != 2 {
+      // Independent random layers overlap; no rhythmic cycles or frequency switches.
+      let quickWeight = mode == 1 ? 0.10 : 0.25
+      let bodyWeight = mode == 1 ? 0.55 : 0.60
+      let slowWeight = mode == 1 ? 0.35 : 0.15
+      drift = tanh(1.8 * (quickWeight * quickMotion.value(at: elapsed)
+        + bodyWeight * bodyMotion.value(at: elapsed)
+        + slowWeight * slowMotion.value(at: elapsed)))
+    }
     if elapsed > gustStartedAt + gustDuration {
-      gustStartedAt = elapsed + Double.random(in: 15...30)
-      gustDuration = Double.random(in: 1.8...3.2)
+      gustStartedAt = elapsed + (mode == 1 ? Double.random(in: 8...20) : Double.random(in: 6...14))
+      gustDuration = mode == 1 ? Double.random(in: 1.2...2.6) : Double.random(in: 0.9...2.1)
       gustDirection = Bool.random() ? 1 : -1
     }
     let progress = max(0, min(1, (elapsed - gustStartedAt) / gustDuration))
     // Smooth pulse has zero velocity at both ends, including when rescheduled.
-    let gustStrength = mode == 2 ? 0.0 : mode == 1 ? 0.14 : 0.18
+    let gustStrength = mode == 2 ? 0.0 : mode == 1 ? 0.13 : 0.22
     let pulse = gustStrength * pow(sin(.pi * progress), 4)
-    // Mostly a quiet glow: retain only a small part of the full drift range.
-    let driftStrength = mode == 2 ? 1.0 : mode == 1 ? 0.18 : 0.24
+    let driftStrength = mode == 2 ? 1.0 : mode == 1 ? 0.50 : 0.95
     let motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection
     let minimum: Double = mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042
     let maximum: Double = mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095
@@ -206,5 +219,33 @@ private final class SafeFlamePlatformController: NSObject {
 
   deinit {
     stop()
+  }
+}
+
+/// Cubic B-spline noise: brightness, velocity and acceleration stay continuous
+/// when a new random control point enters. Layers do not stop at their knots.
+private final class FlameDrift {
+  private let interval: Double
+  private var segment = 0
+  private var points = (0..<4).map { _ in Double.random(in: -1...1) }
+
+  init(interval: Double) { self.interval = interval }
+
+  func value(at time: Double) -> Double {
+    let position = max(0, time) / interval
+    let nextSegment = Int(position)
+    while segment < nextSegment {
+      points.removeFirst()
+      points.append(Double.random(in: -1...1))
+      segment += 1
+    }
+    let u = position - Double(segment)
+    let u2 = u * u
+    let u3 = u2 * u
+    let a = pow(1 - u, 3) * points[0]
+    let b = (3 * u3 - 6 * u2 + 4) * points[1]
+    let c = (-3 * u3 + 3 * u2 + 3 * u + 1) * points[2]
+    let d = u3 * points[3]
+    return (a + b + c + d) / 6
   }
 }
