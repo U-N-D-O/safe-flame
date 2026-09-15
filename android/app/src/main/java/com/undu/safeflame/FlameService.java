@@ -36,31 +36,11 @@ public final class FlameService extends Service {
     private PowerManager.WakeLock wakeLock;
     private int mode;
     private boolean running;
-    private float torchLevel = 0.42f;
-    private float transitionStartLevel = 0.42f;
-    private float transitionTargetLevel = 0.42f;
-    private long transitionStartedAt;
-    private long transitionDurationMs = 250L;
-
-    private final Runnable torchTransition = new Runnable() {
-        @Override
-        public void run() {
-            if (!running) {
-                return;
-            }
-            float progress = Math.min(1f, (SystemClock.uptimeMillis() - transitionStartedAt)
-                    / (float) transitionDurationMs);
-            float eased = progress * progress * (3f - 2f * progress);
-            torchLevel = transitionStartLevel
-                    + (transitionTargetLevel - transitionStartLevel) * eased;
-            setTorch(torchLevel);
-            if (progress < 1f) {
-                handler.postDelayed(this, 33L);
-            } else {
-                torchLevel = transitionTargetLevel;
-            }
-        }
-    };
+    private long motionStartedAt;
+    private double motionPhase;
+    private double gustStartedAt;
+    private double gustDuration = 1;
+    private double gustDirection = 1;
 
     private final Runnable flicker = new Runnable() {
         @Override
@@ -68,18 +48,30 @@ public final class FlameService extends Service {
             if (!running) {
                 return;
             }
-            boolean gust = random.nextDouble() < (mode == 1 ? 0.12 : 0.055);
-            float level = mode == 2
-                    ? randomBetween(0.30f, 0.48f)
-                    : randomBetween(gust ? 0.22f : 0.30f, gust ? 0.58f : 0.52f);
-            long transitionDuration = mode == 2
-                    ? randomBetweenLong(350, 800)
-                    : mode == 1 ? randomBetweenLong(220, 580) : randomBetweenLong(200, 520);
-            animateTorch(level, transitionDuration);
-            long delay = mode == 2
-                    ? randomBetweenLong(1200, 2600)
-                    : mode == 1 ? randomBetweenLong(450, 1500) : randomBetweenLong(350, 1150);
-            handler.postDelayed(this, delay);
+            double elapsed = (SystemClock.elapsedRealtime() - motionStartedAt) / 1000.0;
+            double speed = mode == 2 ? 0.32 : mode == 1 ? 0.85 : 1.15;
+            double t = elapsed * speed;
+            double p = motionPhase;
+            // Same continuously moving waveform as the iOS controller.
+            double drift = 0.55 * Math.sin(1.17 * t + p + 0.32 * Math.sin(0.37 * t + p))
+                    + 0.30 * Math.sin(2.71 * t + 1.7 * p + 0.22 * Math.sin(0.61 * t))
+                    + 0.15 * Math.sin(5.13 * t + 0.7 * p);
+            if (elapsed > gustStartedAt + gustDuration) {
+                gustStartedAt = elapsed + 3 + random.nextDouble() * 6;
+                gustDuration = 0.65 + random.nextDouble() * 0.75;
+                gustDirection = random.nextBoolean() ? 1 : -1;
+            }
+            double progress = Math.max(0, Math.min(1, (elapsed - gustStartedAt) / gustDuration));
+            double pulse = mode == 2 ? 0 : 0.65 * Math.pow(Math.sin(Math.PI * progress), 4);
+            double motion = (1 - pulse) * drift + pulse * gustDirection;
+            double minimum = mode == 2 ? 0.30 : 0.22;
+            double maximum = mode == 2 ? 0.48 : 0.58;
+            double target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion);
+            double ramp = Math.min(1, elapsed / 1.2);
+            double blend = ramp * ramp * (3 - 2 * ramp);
+            double initial = mode == 2 ? 0.38 : 0.42;
+            setTorch((float) (initial + (target - initial) * blend));
+            handler.postDelayed(this, 16L);
         }
     };
 
@@ -130,20 +122,13 @@ public final class FlameService extends Service {
                 .apply();
         startAudio();
         handler.removeCallbacks(flicker);
-        handler.removeCallbacks(torchTransition);
-        torchLevel = mode == 2 ? 0.38f : 0.42f;
-        setTorch(torchLevel);
+        motionStartedAt = SystemClock.elapsedRealtime();
+        motionPhase = random.nextDouble() * 2 * Math.PI;
+        gustStartedAt = 3 + random.nextDouble() * 4;
+        gustDuration = 1;
+        setTorch(mode == 2 ? 0.38f : 0.42f);
         handler.post(flicker);
         return START_STICKY;
-    }
-
-    private void animateTorch(float target, long durationMs) {
-        transitionStartLevel = torchLevel;
-        transitionTargetLevel = target;
-        transitionStartedAt = SystemClock.uptimeMillis();
-        transitionDurationMs = Math.max(80L, durationMs);
-        handler.removeCallbacks(torchTransition);
-        handler.post(torchTransition);
     }
 
     private void startForegroundSafely() {
@@ -267,7 +252,6 @@ public final class FlameService extends Service {
                 .putBoolean("running", false)
                 .apply();
         handler.removeCallbacks(flicker);
-        handler.removeCallbacks(torchTransition);
         turnTorchOff();
         stopAudio();
         if (wakeLock != null && wakeLock.isHeld()) {
@@ -290,14 +274,6 @@ public final class FlameService extends Service {
         if (manager != null) {
             manager.createNotificationChannel(channel);
         }
-    }
-
-    private float randomBetween(float minimum, float maximum) {
-        return minimum + random.nextFloat() * (maximum - minimum);
-    }
-
-    private long randomBetweenLong(long minimum, long maximum) {
-        return minimum + (long) (random.nextDouble() * (maximum - minimum));
     }
 
     private boolean isEmulator() {

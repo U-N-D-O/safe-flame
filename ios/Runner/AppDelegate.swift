@@ -31,12 +31,11 @@ import UIKit
 private final class SafeFlamePlatformController: NSObject {
   private var torch: AVCaptureDevice?
   private var flickerTimer: Timer?
-  private var transitionTimer: Timer?
-  private var torchLevel: Float = 0
-  private var transitionStartLevel: Float = 0
-  private var transitionTargetLevel: Float = 0
-  private var transitionStartedAt = Date()
-  private var transitionDuration: TimeInterval = 0.25
+  private var motionStartedAt: TimeInterval = 0
+  private var motionPhase: Double = 0
+  private var gustStartedAt: Double = 0
+  private var gustDuration: Double = 1
+  private var gustDirection: Double = 1
   private var audioEngine: AVAudioEngine?
   private var audioPlayerNode: AVAudioPlayerNode?
   private var mode = 0
@@ -69,7 +68,6 @@ private final class SafeFlamePlatformController: NSObject {
     } catch {
       return false
     }
-    torchLevel = initialTorchLevel
 
     running = true
     UIApplication.shared.isIdleTimerDisabled = true
@@ -79,12 +77,10 @@ private final class SafeFlamePlatformController: NSObject {
   }
 
   private func stop() {
-    guard running || flickerTimer != nil || transitionTimer != nil else { return }
+    guard running || flickerTimer != nil else { return }
     running = false
     flickerTimer?.invalidate()
     flickerTimer = nil
-    transitionTimer?.invalidate()
-    transitionTimer = nil
     stopAudio()
     UIApplication.shared.isIdleTimerDisabled = false
 
@@ -101,66 +97,45 @@ private final class SafeFlamePlatformController: NSObject {
 
   private func scheduleFlicker() {
     guard running else { return }
-    let delay: TimeInterval
-    switch mode {
-    case 1: delay = Double.random(in: 0.45...1.50)
-    case 2: delay = Double.random(in: 1.20...2.60)
-    default: delay = Double.random(in: 0.35...1.15)
-    }
-    flickerTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+    motionStartedAt = ProcessInfo.processInfo.systemUptime
+    motionPhase = Double.random(in: 0...(2 * .pi))
+    gustStartedAt = Double.random(in: 3...7)
+    gustDuration = 1
+    gustDirection = 1
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
       self?.flicker()
     }
+    flickerTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
   }
 
   private func flicker() {
     guard running else { return }
-    let level: Float
-    let duration: TimeInterval
-    switch mode {
-    case 1:
-      level = Float.random(in: 0.040...0.090)
-      duration = Double.random(in: 0.22...0.58)
-    case 2:
-      level = Float.random(in: 0.022...0.050)
-      duration = Double.random(in: 0.35...0.80)
-    default:
-      level = Float.random(in: 0.042...0.095)
-      duration = Double.random(in: 0.20...0.52)
+    let elapsed = ProcessInfo.processInfo.systemUptime - motionStartedAt
+    let speed = mode == 2 ? 0.32 : mode == 1 ? 0.85 : 1.15
+    let t = elapsed * speed
+    let p = motionPhase
+    // Overlapping, phase-modulated waves never wait at a target brightness.
+    // Keep this normalized motion identical to FlameService on Android.
+    let drift = 0.55 * sin(1.17 * t + p + 0.32 * sin(0.37 * t + p))
+      + 0.30 * sin(2.71 * t + 1.7 * p + 0.22 * sin(0.61 * t))
+      + 0.15 * sin(5.13 * t + 0.7 * p)
+    if elapsed > gustStartedAt + gustDuration {
+      gustStartedAt = elapsed + Double.random(in: 3...9)
+      gustDuration = Double.random(in: 0.65...1.4)
+      gustDirection = Bool.random() ? 1 : -1
     }
-    animateTorch(to: level, over: duration)
-    scheduleFlicker()
-  }
-
-  private func animateTorch(to target: Float, over duration: TimeInterval) {
-    guard running else { return }
-
-    transitionTimer?.invalidate()
-    transitionStartLevel = torchLevel
-    transitionTargetLevel = target
-    transitionStartedAt = Date()
-    transitionDuration = max(0.08, duration)
-
-    let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
-      guard let self, self.running else {
-        timer.invalidate()
-        return
-      }
-
-      let progress = min(1.0, Date().timeIntervalSince(self.transitionStartedAt) / self.transitionDuration)
-      let eased = progress * progress * (3.0 - 2.0 * progress)
-      let level = self.transitionStartLevel
-        + (self.transitionTargetLevel - self.transitionStartLevel) * Float(eased)
-      self.torchLevel = level
-      try? self.setTorch(level)
-
-      if progress >= 1.0 {
-        self.torchLevel = self.transitionTargetLevel
-        timer.invalidate()
-        self.transitionTimer = nil
-      }
-    }
-    transitionTimer = timer
-    RunLoop.main.add(timer, forMode: .common)
+    let progress = max(0, min(1, (elapsed - gustStartedAt) / gustDuration))
+    // Smooth pulse has zero velocity at both ends, including when rescheduled.
+    let pulse = mode == 2 ? 0 : 0.65 * pow(sin(.pi * progress), 4)
+    let motion = (1 - pulse) * drift + pulse * gustDirection
+    let minimum: Double = mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042
+    let maximum: Double = mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095
+    let target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion)
+    let ramp = min(1, elapsed / 1.2)
+    let blend = ramp * ramp * (3 - 2 * ramp)
+    let initial = Double(initialLevel())
+    try? setTorch(Float(initial + (target - initial) * blend))
   }
 
   private func initialLevel() -> Float {
@@ -186,19 +161,15 @@ private final class SafeFlamePlatformController: NSObject {
       try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
       try session.setActive(true)
 
-      guard
-        let appFrameworkURL = Bundle.main.url(
-          forResource: "App",
-          withExtension: "framework",
-          subdirectory: "Frameworks"
-        ),
-        let appBundle = Bundle(url: appFrameworkURL),
-        let url = appBundle.url(
-          forResource: soundName,
-          withExtension: "wav",
-          subdirectory: "flutter_assets/files/SafeFlame/Resources"
-        )
-      else { return }
+      // Flutter's App.framework embeds assets at its root, not in a native
+      // framework Resources directory. Address the packaged file directly.
+      let url = Bundle.main.bundleURL.appendingPathComponent(
+        "Frameworks/App.framework/flutter_assets/files/SafeFlame/Resources/\(soundName).wav"
+      )
+      guard FileManager.default.fileExists(atPath: url.path) else {
+        throw NSError(domain: "SafeFlame.Audio", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "Missing bundled audio: \(soundName)"])
+      }
 
       let file = try AVAudioFile(forReading: url)
       guard let buffer = AVAudioPCMBuffer(
@@ -218,6 +189,7 @@ private final class SafeFlamePlatformController: NSObject {
       audioEngine = engine
       audioPlayerNode = player
     } catch {
+      NSLog("Safe Flame audio failed: %@", error.localizedDescription)
       stopAudio()
     }
   }

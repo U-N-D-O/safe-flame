@@ -46,13 +46,16 @@ jobs:
           echo "Build version: $build_version"
           test "$bundle_id" = "com.qila.safeflame"
           test "$short_version" = "1.0.0"
-          test "$build_version" = "1"
+          expected_build=$(sed -n 's/^version: .*+//p' pubspec.yaml | tr -d '\r')
+          test "$build_version" = "$expected_build"
+          swift scripts/validate-ios-assets.swift "$app" store/safe-flame-icons/ios/AppIcon.appiconset/Icon-App-60x60@2x.png
+          cp SafeFlame-unsigned.ipa "SafeFlame-${short_version}-${build_version}-${GITHUB_SHA:0:7}.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: safe-flame-ios-ipa
-          path: SafeFlame-unsigned.ipa
+          path: SafeFlame-*.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -63,3 +66,4 @@ jobs:
         run: |
           gh release view safe-flame-latest >/dev/null 2>&1 || gh release create safe-flame-latest --title "Safe Flame latest iOS IPA" --notes "Unsigned IPA for AltServer or AltStore."
           gh release upload safe-flame-latest SafeFlame-unsigned.ipa --clobber
+          gh release upload safe-flame-latest SafeFlame-1.0.0-*.ipa --clobber
