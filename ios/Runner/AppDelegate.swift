@@ -32,13 +32,12 @@ private final class SafeFlamePlatformController: NSObject {
   private var torch: AVCaptureDevice?
   private var flickerTimer: Timer?
   private var motionStartedAt: TimeInterval = 0
-  private var motionPhase: Double = 0
+  private var lastMotionTime: TimeInterval = 0
+  private var torchLevel: Double = 0
+  private var torchVelocity: Double = 0
   private var quickMotion = FlameDrift(interval: 0.35)
   private var bodyMotion = FlameDrift(interval: 1.3)
   private var slowMotion = FlameDrift(interval: 4.7)
-  private var gustStartedAt: Double = 0
-  private var gustDuration: Double = 1
-  private var gustDirection: Double = 1
   private var audioEngine: AVAudioEngine?
   private var audioPlayerNode: AVAudioPlayerNode?
   private var mode = 0
@@ -72,6 +71,8 @@ private final class SafeFlamePlatformController: NSObject {
       return false
     }
 
+    torchLevel = Double(initialTorchLevel)
+    torchVelocity = 0
     running = true
     UIApplication.shared.isIdleTimerDisabled = true
     startAudio()
@@ -101,13 +102,10 @@ private final class SafeFlamePlatformController: NSObject {
   private func scheduleFlicker() {
     guard running else { return }
     motionStartedAt = ProcessInfo.processInfo.systemUptime
-    motionPhase = Double.random(in: 0...(2 * .pi))
-    quickMotion = FlameDrift(interval: mode == 1 ? 0.65 : 0.35)
+    lastMotionTime = motionStartedAt
+    quickMotion = FlameDrift(interval: mode == 1 ? 0.65 : mode == 2 ? 1.8 : 0.35)
     bodyMotion = FlameDrift(interval: mode == 1 ? 2.0 : 1.3)
     slowMotion = FlameDrift(interval: mode == 1 ? 5.3 : 4.7)
-    gustStartedAt = mode == 1 ? Double.random(in: 8...20) : Double.random(in: 6...14)
-    gustDuration = mode == 1 ? Double.random(in: 1.2...2.6) : Double.random(in: 0.9...2.1)
-    gustDirection = 1
     let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
       self?.flicker()
     }
@@ -117,48 +115,42 @@ private final class SafeFlamePlatformController: NSObject {
 
   private func flicker() {
     guard running else { return }
-    let elapsed = ProcessInfo.processInfo.systemUptime - motionStartedAt
-    let t = elapsed * 0.32
-    let p = motionPhase
-    // Overlapping, phase-modulated waves never wait at a target brightness.
-    // Keep this normalized motion identical to FlameService on Android.
-    var drift = 0.55 * sin(1.17 * t + p + 0.32 * sin(0.37 * t + p))
-      + 0.30 * sin(2.71 * t + 1.7 * p + 0.22 * sin(0.61 * t))
-      + 0.15 * sin(5.13 * t + 0.7 * p)
-    if mode != 2 {
-      // Independent random layers overlap; no rhythmic cycles or frequency switches.
-      let quickWeight = mode == 1 ? 0.10 : 0.25
-      let bodyWeight = mode == 1 ? 0.55 : 0.60
-      let slowWeight = mode == 1 ? 0.35 : 0.15
-      drift = tanh(1.8 * (quickWeight * quickMotion.value(at: elapsed)
-        + bodyWeight * bodyMotion.value(at: elapsed)
-        + slowWeight * slowMotion.value(at: elapsed)))
+    let now = ProcessInfo.processInfo.systemUptime
+    let elapsed = now - motionStartedAt
+    let delta = min(0.1, max(1.0 / 120.0, now - lastMotionTime))
+    lastMotionTime = now
+
+    let weights: (Double, Double, Double)
+    switch mode {
+    case 1: weights = (0.10, 0.55, 0.35) // Candle: quiet body with living detail.
+    case 2: weights = (0.05, 0.25, 0.70) // Nightlight: very slow and restrained.
+    default: weights = (0.25, 0.60, 0.15) // Fireplace: visibly active.
     }
-    if elapsed > gustStartedAt + gustDuration {
-      gustStartedAt = elapsed + (mode == 1 ? Double.random(in: 8...20) : Double.random(in: 6...14))
-      gustDuration = mode == 1 ? Double.random(in: 1.2...2.6) : Double.random(in: 0.9...2.1)
-      gustDirection = Bool.random() ? 1 : -1
-    }
-    let progress = max(0, min(1, (elapsed - gustStartedAt) / gustDuration))
-    // Smooth pulse has zero velocity at both ends, including when rescheduled.
-    let gustStrength = mode == 2 ? 0.0 : mode == 1 ? 0.13 : 0.22
-    let pulse = gustStrength * pow(sin(.pi * progress), 4)
-    let driftStrength = mode == 2 ? 1.0 : mode == 1 ? 0.50 : 0.95
-    let motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection
-    let minimum: Double = mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042
-    let maximum: Double = mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095
-    let target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion)
-    let ramp = min(1, elapsed / 1.2)
-    let blend = ramp * ramp * (3 - 2 * ramp)
-    let initial = Double(initialLevel())
-    try? setTorch(Float(initial + (target - initial) * blend))
+    let noise = tanh(1.8 * (weights.0 * quickMotion.value(at: elapsed)
+      + weights.1 * bodyMotion.value(at: elapsed)
+      + weights.2 * slowMotion.value(at: elapsed)))
+
+    // Keep the same relative intensity shape while lowering every level by 20%.
+    let minimum: Double = (mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042) * 0.8
+    let maximum: Double = (mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095) * 0.8
+    let target = minimum + (maximum - minimum) * (0.5 + 0.5 * noise)
+
+    // Follow a moving target like a small spring. The current brightness
+    // always influences the next one, so it never holds at a peak or valley.
+    let response = mode == 2 ? 0.45 : mode == 1 ? 0.95 : 1.35
+    let damping = mode == 2 ? 1.25 : mode == 1 ? 1.65 : 1.95
+    let acceleration = (target - torchLevel) * response - torchVelocity * damping
+    torchVelocity += acceleration * delta
+    torchLevel += torchVelocity * delta
+    torchLevel = max(minimum, min(maximum, torchLevel))
+    try? setTorch(Float(torchLevel))
   }
 
   private func initialLevel() -> Float {
     switch mode {
-    case 1: return 0.05
-    case 2: return 0.035
-    default: return 0.065
+    case 1: return 0.05 * 0.8
+    case 2: return 0.035 * 0.8
+    default: return 0.065 * 0.8
     }
   }
 

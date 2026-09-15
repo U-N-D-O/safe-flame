@@ -36,14 +36,13 @@ public final class FlameService extends Service {
     private PowerManager.WakeLock wakeLock;
     private int mode;
     private boolean running;
-    private long motionStartedAt;
-    private double motionPhase;
+    private double motionStartedAt;
+    private double lastMotionTime;
+    private double torchLevel;
+    private double torchVelocity;
     private FlameDrift quickMotion = new FlameDrift(0.35);
     private FlameDrift bodyMotion = new FlameDrift(1.3);
     private FlameDrift slowMotion = new FlameDrift(4.7);
-    private double gustStartedAt;
-    private double gustDuration = 1;
-    private double gustDirection = 1;
 
     private final Runnable flicker = new Runnable() {
         @Override
@@ -51,38 +50,43 @@ public final class FlameService extends Service {
             if (!running) {
                 return;
             }
-            double elapsed = (SystemClock.elapsedRealtime() - motionStartedAt) / 1000.0;
-            double t = elapsed * 0.32;
-            double p = motionPhase;
-            // Same continuously moving waveform as the iOS controller.
-            double drift = 0.55 * Math.sin(1.17 * t + p + 0.32 * Math.sin(0.37 * t + p))
-                    + 0.30 * Math.sin(2.71 * t + 1.7 * p + 0.22 * Math.sin(0.61 * t))
-                    + 0.15 * Math.sin(5.13 * t + 0.7 * p);
-            if (mode != 2) {
-                double quickWeight = mode == 1 ? 0.10 : 0.25;
-                double bodyWeight = mode == 1 ? 0.55 : 0.60;
-                double slowWeight = mode == 1 ? 0.35 : 0.15;
-                drift = Math.tanh(1.8 * (quickWeight * quickMotion.value(elapsed)
-                        + bodyWeight * bodyMotion.value(elapsed)
-                        + slowWeight * slowMotion.value(elapsed)));
+            double now = SystemClock.elapsedRealtime() / 1000.0;
+            double elapsed = now - motionStartedAt;
+            double delta = Math.min(0.1, Math.max(1.0 / 120.0, now - lastMotionTime));
+            lastMotionTime = now;
+
+            double quickWeight;
+            double bodyWeight;
+            double slowWeight;
+            if (mode == 1) {
+                quickWeight = 0.10;
+                bodyWeight = 0.55;
+                slowWeight = 0.35;
+            } else if (mode == 2) {
+                quickWeight = 0.05;
+                bodyWeight = 0.25;
+                slowWeight = 0.70;
+            } else {
+                quickWeight = 0.25;
+                bodyWeight = 0.60;
+                slowWeight = 0.15;
             }
-            if (elapsed > gustStartedAt + gustDuration) {
-                gustStartedAt = elapsed + (mode == 1 ? 8 + random.nextDouble() * 12 : 6 + random.nextDouble() * 8);
-                gustDuration = mode == 1 ? 1.2 + random.nextDouble() * 1.4 : 0.9 + random.nextDouble() * 1.2;
-                gustDirection = random.nextBoolean() ? 1 : -1;
-            }
-            double progress = Math.max(0, Math.min(1, (elapsed - gustStartedAt) / gustDuration));
-            double gustStrength = mode == 2 ? 0 : mode == 1 ? 0.13 : 0.22;
-            double pulse = gustStrength * Math.pow(Math.sin(Math.PI * progress), 4);
-            double driftStrength = mode == 2 ? 1 : mode == 1 ? 0.50 : 0.95;
-            double motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection;
-            double minimum = mode == 2 ? 0.30 : 0.22;
-            double maximum = mode == 2 ? 0.48 : 0.58;
-            double target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion);
-            double ramp = Math.min(1, elapsed / 1.2);
-            double blend = ramp * ramp * (3 - 2 * ramp);
-            double initial = mode == 2 ? 0.38 : 0.42;
-            setTorch((float) (initial + (target - initial) * blend));
+            double noise = Math.tanh(1.8 * (quickWeight * quickMotion.value(elapsed)
+                    + bodyWeight * bodyMotion.value(elapsed)
+                    + slowWeight * slowMotion.value(elapsed)));
+            double minimum = (mode == 2 ? 0.30 : 0.22) * 0.8;
+            double maximum = (mode == 2 ? 0.48 : 0.58) * 0.8;
+            double target = minimum + (maximum - minimum) * (0.5 + 0.5 * noise);
+
+            // Mean-reverting movement avoids held high/low targets while
+            // remaining smooth between every 60 Hz torch update.
+            double response = mode == 2 ? 0.45 : mode == 1 ? 0.95 : 1.35;
+            double damping = mode == 2 ? 1.25 : mode == 1 ? 1.65 : 1.95;
+            double acceleration = (target - torchLevel) * response - torchVelocity * damping;
+            torchVelocity += acceleration * delta;
+            torchLevel += torchVelocity * delta;
+            torchLevel = Math.max(minimum, Math.min(maximum, torchLevel));
+            setTorch((float) torchLevel);
             handler.postDelayed(this, 16L);
         }
     };
@@ -134,16 +138,20 @@ public final class FlameService extends Service {
                 .apply();
         startAudio();
         handler.removeCallbacks(flicker);
-        motionStartedAt = SystemClock.elapsedRealtime();
-        motionPhase = random.nextDouble() * 2 * Math.PI;
-        quickMotion = new FlameDrift(mode == 1 ? 0.65 : 0.35);
+        motionStartedAt = SystemClock.elapsedRealtime() / 1000.0;
+        lastMotionTime = motionStartedAt;
+        torchLevel = initialLevel();
+        torchVelocity = 0;
         bodyMotion = new FlameDrift(mode == 1 ? 2.0 : 1.3);
         slowMotion = new FlameDrift(mode == 1 ? 5.3 : 4.7);
-        gustStartedAt = mode == 1 ? 8 + random.nextDouble() * 12 : 6 + random.nextDouble() * 8;
-        gustDuration = mode == 1 ? 1.2 + random.nextDouble() * 1.4 : 0.9 + random.nextDouble() * 1.2;
-        setTorch(mode == 2 ? 0.38f : 0.42f);
+        quickMotion = new FlameDrift(mode == 1 ? 0.65 : mode == 2 ? 1.8 : 0.35);
+        setTorch((float) torchLevel);
         handler.post(flicker);
         return START_STICKY;
+    }
+
+    private float initialLevel() {
+        return (mode == 2 ? 0.38f : 0.42f) * 0.8f;
     }
 
     private void startForegroundSafely() {
