@@ -273,6 +273,7 @@ public final class FlameService extends Service {
     }
 
     private final class FlameEventMotion {
+        private final int motionMode;
         private final double eventMin;
         private final double eventMax;
         private final double recovery;
@@ -287,8 +288,16 @@ public final class FlameService extends Service {
         private double desiredOffset;
         private double currentOffset;
         private double currentVelocity;
+        private int candleStage;
+        private double candleStageElapsed;
+        private double candleStageDuration = 0.1;
+        private double candleStageFrom;
+        private double candleStageTo;
+        private double candleDip;
+        private double candleRise;
 
         FlameEventMotion(int mode) {
+            motionMode = mode;
             if (mode == 1) {
                 eventMin = 0.55; eventMax = 1.80; recovery = 0.34;
                 regularKick = 0.003; rareKick = 0.012;
@@ -307,6 +316,10 @@ public final class FlameService extends Service {
         }
 
         double value(double delta) {
+            if (motionMode == 1) {
+                return candleValue(delta);
+            }
+
             time += delta;
             if (time >= nextEvent) {
                 desiredOffset += randomBetween(-regularKick, regularKick);
@@ -321,6 +334,57 @@ public final class FlameService extends Service {
             currentVelocity += acceleration * delta;
             currentOffset += currentVelocity * delta;
             currentOffset = Math.max(-maximumOffset, Math.min(maximumOffset, currentOffset));
+            return currentOffset;
+        }
+
+        private double candleValue(double delta) {
+            time += delta;
+            if (candleStage == 0) {
+                if (time >= nextEvent) {
+                    candleDip = randomBetween(0.028, 0.050);
+                    candleRise = randomBetween(0.018, 0.036);
+                    candleStage = 1;
+                    candleStageElapsed = 0;
+                    candleStageFrom = 0;
+                    candleStageTo = -candleDip;
+                    candleStageDuration = randomBetween(0.08, 0.15);
+                }
+                return 0;
+            }
+
+            candleStageElapsed += delta;
+            double progress = Math.min(1, candleStageElapsed / candleStageDuration);
+            double eased = progress * progress * (3 - 2 * progress);
+            currentOffset = candleStageFrom + (candleStageTo - candleStageFrom) * eased;
+
+            if (progress >= 1) {
+                if (candleStage == 1) {
+                    candleStage = 2;
+                    candleStageFrom = -candleDip;
+                    candleStageTo = 0;
+                    candleStageDuration = randomBetween(0.10, 0.18);
+                } else if (candleStage == 2) {
+                    candleStage = 3;
+                    candleStageFrom = 0;
+                    candleStageTo = 0;
+                    candleStageDuration = randomBetween(0.06, 0.14);
+                } else if (candleStage == 3) {
+                    candleStage = 4;
+                    candleStageFrom = 0;
+                    candleStageTo = candleRise;
+                    candleStageDuration = randomBetween(0.28, 0.50);
+                } else if (candleStage == 4) {
+                    candleStage = 5;
+                    candleStageFrom = candleRise;
+                    candleStageTo = 0;
+                    candleStageDuration = randomBetween(0.45, 0.85);
+                } else {
+                    candleStage = 0;
+                    currentOffset = 0;
+                    nextEvent = time + randomBetween(3.0, 7.5);
+                }
+                candleStageElapsed = 0;
+            }
             return currentOffset;
         }
 

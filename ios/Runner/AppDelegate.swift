@@ -191,6 +191,7 @@ private final class SafeFlamePlatformController: NSObject {
 /// decays back toward zero, so the flame returns to its base instead of
 /// following a long wave or holding at a peak.
 private final class FlameEventMotion {
+  private let mode: Int
   private let eventInterval: ClosedRange<Double>
   private let recovery: Double
   private let regularKick: ClosedRange<Double>
@@ -203,8 +204,16 @@ private final class FlameEventMotion {
   private var desiredOffset = 0.0
   private var currentOffset = 0.0
   private var currentVelocity = 0.0
+  private var candleStage = 0
+  private var candleStageElapsed = 0.0
+  private var candleStageDuration = 0.1
+  private var candleStageFrom = 0.0
+  private var candleStageTo = 0.0
+  private var candleDip = 0.0
+  private var candleRise = 0.0
 
   init(mode: Int) {
+    self.mode = mode
     switch mode {
     case 1: // Candle: small, sparse, quick disturbances.
       eventInterval = 0.55...1.80
@@ -233,6 +242,10 @@ private final class FlameEventMotion {
   }
 
   func value(delta: Double) -> Double {
+    if mode == 1 {
+      return candleValue(delta: delta)
+    }
+
     time += delta
     if time >= nextEvent {
       desiredOffset += Double.random(in: regularKick)
@@ -249,6 +262,58 @@ private final class FlameEventMotion {
     currentVelocity += acceleration * delta
     currentOffset += currentVelocity * delta
     currentOffset = max(-maximumOffset, min(maximumOffset, currentOffset))
+    return currentOffset
+  }
+
+  private func candleValue(delta: Double) -> Double {
+    time += delta
+    guard candleStage != 0 else {
+      if time >= nextEvent {
+        candleDip = Double.random(in: 0.008...0.014)
+        candleRise = Double.random(in: 0.005...0.010)
+        candleStage = 1
+        candleStageElapsed = 0
+        candleStageFrom = 0
+        candleStageTo = -candleDip
+        candleStageDuration = Double.random(in: 0.08...0.15)
+      }
+      return 0
+    }
+
+    candleStageElapsed += delta
+    let progress = min(1.0, candleStageElapsed / candleStageDuration)
+    let eased = progress * progress * (3.0 - 2.0 * progress)
+    currentOffset = candleStageFrom + (candleStageTo - candleStageFrom) * eased
+
+    if progress >= 1.0 {
+      switch candleStage {
+      case 1: // Return to the exact baseline after the brief dim.
+        candleStage = 2
+        candleStageFrom = -candleDip
+        candleStageTo = 0
+        candleStageDuration = Double.random(in: 0.10...0.18)
+      case 2: // Briefly hold the exact baseline before rising.
+        candleStage = 3
+        candleStageFrom = 0
+        candleStageTo = 0
+        candleStageDuration = Double.random(in: 0.06...0.14)
+      case 3: // A slower warm lift, then another smooth return.
+        candleStage = 4
+        candleStageFrom = 0
+        candleStageTo = candleRise
+        candleStageDuration = Double.random(in: 0.28...0.50)
+      case 4:
+        candleStage = 5
+        candleStageFrom = candleRise
+        candleStageTo = 0
+        candleStageDuration = Double.random(in: 0.45...0.85)
+      default:
+        candleStage = 0
+        currentOffset = 0
+        nextEvent = time + Double.random(in: 3.0...7.5)
+      }
+      candleStageElapsed = 0
+    }
     return currentOffset
   }
 }
