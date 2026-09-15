@@ -99,8 +99,8 @@ private final class SafeFlamePlatformController: NSObject {
     guard running else { return }
     motionStartedAt = ProcessInfo.processInfo.systemUptime
     motionPhase = Double.random(in: 0...(2 * .pi))
-    gustStartedAt = Double.random(in: 3...7)
-    gustDuration = 1
+    gustStartedAt = Double.random(in: 15...30)
+    gustDuration = Double.random(in: 1.8...3.2)
     gustDirection = 1
     let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
       self?.flicker()
@@ -112,7 +112,7 @@ private final class SafeFlamePlatformController: NSObject {
   private func flicker() {
     guard running else { return }
     let elapsed = ProcessInfo.processInfo.systemUptime - motionStartedAt
-    let speed = mode == 2 ? 0.32 : mode == 1 ? 0.85 : 1.15
+    let speed = mode == 2 ? 0.32 : mode == 1 ? 0.28 : 0.38
     let t = elapsed * speed
     let p = motionPhase
     // Overlapping, phase-modulated waves never wait at a target brightness.
@@ -121,14 +121,17 @@ private final class SafeFlamePlatformController: NSObject {
       + 0.30 * sin(2.71 * t + 1.7 * p + 0.22 * sin(0.61 * t))
       + 0.15 * sin(5.13 * t + 0.7 * p)
     if elapsed > gustStartedAt + gustDuration {
-      gustStartedAt = elapsed + Double.random(in: 3...9)
-      gustDuration = Double.random(in: 0.65...1.4)
+      gustStartedAt = elapsed + Double.random(in: 15...30)
+      gustDuration = Double.random(in: 1.8...3.2)
       gustDirection = Bool.random() ? 1 : -1
     }
     let progress = max(0, min(1, (elapsed - gustStartedAt) / gustDuration))
     // Smooth pulse has zero velocity at both ends, including when rescheduled.
-    let pulse = mode == 2 ? 0 : 0.65 * pow(sin(.pi * progress), 4)
-    let motion = (1 - pulse) * drift + pulse * gustDirection
+    let gustStrength = mode == 2 ? 0.0 : mode == 1 ? 0.14 : 0.18
+    let pulse = gustStrength * pow(sin(.pi * progress), 4)
+    // Mostly a quiet glow: retain only a small part of the full drift range.
+    let driftStrength = mode == 2 ? 1.0 : mode == 1 ? 0.18 : 0.24
+    let motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection
     let minimum: Double = mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042
     let maximum: Double = mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095
     let target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion)

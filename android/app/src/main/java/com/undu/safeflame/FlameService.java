@@ -49,7 +49,7 @@ public final class FlameService extends Service {
                 return;
             }
             double elapsed = (SystemClock.elapsedRealtime() - motionStartedAt) / 1000.0;
-            double speed = mode == 2 ? 0.32 : mode == 1 ? 0.85 : 1.15;
+            double speed = mode == 2 ? 0.32 : mode == 1 ? 0.28 : 0.38;
             double t = elapsed * speed;
             double p = motionPhase;
             // Same continuously moving waveform as the iOS controller.
@@ -57,13 +57,15 @@ public final class FlameService extends Service {
                     + 0.30 * Math.sin(2.71 * t + 1.7 * p + 0.22 * Math.sin(0.61 * t))
                     + 0.15 * Math.sin(5.13 * t + 0.7 * p);
             if (elapsed > gustStartedAt + gustDuration) {
-                gustStartedAt = elapsed + 3 + random.nextDouble() * 6;
-                gustDuration = 0.65 + random.nextDouble() * 0.75;
+                gustStartedAt = elapsed + 15 + random.nextDouble() * 15;
+                gustDuration = 1.8 + random.nextDouble() * 1.4;
                 gustDirection = random.nextBoolean() ? 1 : -1;
             }
             double progress = Math.max(0, Math.min(1, (elapsed - gustStartedAt) / gustDuration));
-            double pulse = mode == 2 ? 0 : 0.65 * Math.pow(Math.sin(Math.PI * progress), 4);
-            double motion = (1 - pulse) * drift + pulse * gustDirection;
+            double gustStrength = mode == 2 ? 0 : mode == 1 ? 0.14 : 0.18;
+            double pulse = gustStrength * Math.pow(Math.sin(Math.PI * progress), 4);
+            double driftStrength = mode == 2 ? 1 : mode == 1 ? 0.18 : 0.24;
+            double motion = (1 - pulse) * driftStrength * drift + pulse * gustDirection;
             double minimum = mode == 2 ? 0.30 : 0.22;
             double maximum = mode == 2 ? 0.48 : 0.58;
             double target = minimum + (maximum - minimum) * (0.5 + 0.5 * motion);
@@ -124,8 +126,8 @@ public final class FlameService extends Service {
         handler.removeCallbacks(flicker);
         motionStartedAt = SystemClock.elapsedRealtime();
         motionPhase = random.nextDouble() * 2 * Math.PI;
-        gustStartedAt = 3 + random.nextDouble() * 4;
-        gustDuration = 1;
+        gustStartedAt = 15 + random.nextDouble() * 15;
+        gustDuration = 1.8 + random.nextDouble() * 1.4;
         setTorch(mode == 2 ? 0.38f : 0.42f);
         handler.post(flicker);
         return START_STICKY;
