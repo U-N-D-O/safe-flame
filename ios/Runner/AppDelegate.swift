@@ -31,13 +31,9 @@ import UIKit
 private final class SafeFlamePlatformController: NSObject {
   private var torch: AVCaptureDevice?
   private var flickerTimer: Timer?
-  private var motionStartedAt: TimeInterval = 0
   private var lastMotionTime: TimeInterval = 0
   private var torchLevel: Double = 0
-  private var torchVelocity: Double = 0
-  private var quickMotion = FlameDrift(interval: 0.35)
-  private var bodyMotion = FlameDrift(interval: 1.3)
-  private var slowMotion = FlameDrift(interval: 4.7)
+  private var flameMotion = FlameEventMotion(mode: 0)
   private var audioEngine: AVAudioEngine?
   private var audioPlayerNode: AVAudioPlayerNode?
   private var mode = 0
@@ -72,7 +68,7 @@ private final class SafeFlamePlatformController: NSObject {
     }
 
     torchLevel = Double(initialTorchLevel)
-    torchVelocity = 0
+    flameMotion = FlameEventMotion(mode: self.mode)
     running = true
     UIApplication.shared.isIdleTimerDisabled = true
     startAudio()
@@ -101,11 +97,7 @@ private final class SafeFlamePlatformController: NSObject {
 
   private func scheduleFlicker() {
     guard running else { return }
-    motionStartedAt = ProcessInfo.processInfo.systemUptime
-    lastMotionTime = motionStartedAt
-    quickMotion = FlameDrift(interval: mode == 1 ? 0.65 : mode == 2 ? 1.8 : 0.35)
-    bodyMotion = FlameDrift(interval: mode == 1 ? 2.0 : 1.3)
-    slowMotion = FlameDrift(interval: mode == 1 ? 5.3 : 4.7)
+    lastMotionTime = ProcessInfo.processInfo.systemUptime
     let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
       self?.flicker()
     }
@@ -116,41 +108,22 @@ private final class SafeFlamePlatformController: NSObject {
   private func flicker() {
     guard running else { return }
     let now = ProcessInfo.processInfo.systemUptime
-    let elapsed = now - motionStartedAt
     let delta = min(0.1, max(1.0 / 120.0, now - lastMotionTime))
     lastMotionTime = now
 
-    let weights: (Double, Double, Double)
-    switch mode {
-    case 1: weights = (0.10, 0.55, 0.35) // Candle: quiet body with living detail.
-    case 2: weights = (0.05, 0.25, 0.70) // Nightlight: very slow and restrained.
-    default: weights = (0.25, 0.60, 0.15) // Fireplace: visibly active.
-    }
-    let noise = tanh(1.8 * (weights.0 * quickMotion.value(at: elapsed)
-      + weights.1 * bodyMotion.value(at: elapsed)
-      + weights.2 * slowMotion.value(at: elapsed)))
-
-    // Keep the same relative intensity shape while lowering every level by 20%.
+    let motion = flameMotion.value(delta: delta)
+    let base: Double = mode == 2 ? 0.0288 : mode == 1 ? 0.052 : 0.0548
     let minimum: Double = (mode == 2 ? 0.022 : mode == 1 ? 0.040 : 0.042) * 0.8
     let maximum: Double = (mode == 2 ? 0.050 : mode == 1 ? 0.090 : 0.095) * 0.8
-    let target = minimum + (maximum - minimum) * (0.5 + 0.5 * noise)
-
-    // Follow a moving target like a small spring. The current brightness
-    // always influences the next one, so it never holds at a peak or valley.
-    let response = mode == 2 ? 0.45 : mode == 1 ? 0.95 : 1.35
-    let damping = mode == 2 ? 1.25 : mode == 1 ? 1.65 : 1.95
-    let acceleration = (target - torchLevel) * response - torchVelocity * damping
-    torchVelocity += acceleration * delta
-    torchLevel += torchVelocity * delta
-    torchLevel = max(minimum, min(maximum, torchLevel))
+    torchLevel = max(minimum, min(maximum, base + motion))
     try? setTorch(Float(torchLevel))
   }
 
   private func initialLevel() -> Float {
     switch mode {
-    case 1: return 0.05 * 0.8
-    case 2: return 0.035 * 0.8
-    default: return 0.065 * 0.8
+    case 1: return 0.052
+    case 2: return 0.0288
+    default: return 0.0548
     }
   }
 
@@ -214,30 +187,68 @@ private final class SafeFlamePlatformController: NSObject {
   }
 }
 
-/// Cubic B-spline noise: brightness, velocity and acceleration stay continuous
-/// when a new random control point enters. Layers do not stop at their knots.
-private final class FlameDrift {
-  private let interval: Double
-  private var segment = 0
-  private var points = (0..<4).map { _ in Double.random(in: -1...1) }
+/// Short, irregular air movements. Each event nudges the light and then
+/// decays back toward zero, so the flame returns to its base instead of
+/// following a long wave or holding at a peak.
+private final class FlameEventMotion {
+  private let eventInterval: ClosedRange<Double>
+  private let recovery: Double
+  private let regularKick: ClosedRange<Double>
+  private let rareKick: ClosedRange<Double>
+  private let rareInterval: ClosedRange<Double>
+  private let maximumOffset: Double
+  private var time = 0.0
+  private var nextEvent: Double
+  private var nextRareEvent: Double
+  private var desiredOffset = 0.0
+  private var currentOffset = 0.0
+  private var currentVelocity = 0.0
 
-  init(interval: Double) { self.interval = interval }
-
-  func value(at time: Double) -> Double {
-    let position = max(0, time) / interval
-    let nextSegment = Int(position)
-    while segment < nextSegment {
-      points.removeFirst()
-      points.append(Double.random(in: -1...1))
-      segment += 1
+  init(mode: Int) {
+    switch mode {
+    case 1: // Candle: small, sparse, quick disturbances.
+      eventInterval = 0.55...1.80
+      recovery = 0.34
+      regularKick = -0.003...0.003
+      rareKick = -0.012...0.012
+      rareInterval = 4.0...9.0
+      maximumOffset = 0.020
+    case 2: // Nightlight: nearly still.
+      eventInterval = 1.40...3.20
+      recovery = 0.70
+      regularKick = -0.0015...0.0015
+      rareKick = -0.004...0.004
+      rareInterval = 8.0...16.0
+      maximumOffset = 0.0112
+    default: // Fireplace: more frequent and longer, with larger movement.
+      eventInterval = 0.22...0.75
+      recovery = 0.78
+      regularKick = -0.008...0.008
+      rareKick = -0.020...0.020
+      rareInterval = 1.8...4.8
+      maximumOffset = 0.0212
     }
-    let u = position - Double(segment)
-    let u2 = u * u
-    let u3 = u2 * u
-    let a = pow(1 - u, 3) * points[0]
-    let b = (3 * u3 - 6 * u2 + 4) * points[1]
-    let c = (-3 * u3 + 3 * u2 + 3 * u + 1) * points[2]
-    let d = u3 * points[3]
-    return (a + b + c + d) / 6
+    nextEvent = Double.random(in: eventInterval)
+    nextRareEvent = Double.random(in: rareInterval)
+  }
+
+  func value(delta: Double) -> Double {
+    time += delta
+    if time >= nextEvent {
+      desiredOffset += Double.random(in: regularKick)
+      nextEvent = time + Double.random(in: eventInterval)
+    }
+    if time >= nextRareEvent {
+      desiredOffset += Double.random(in: rareKick)
+      nextRareEvent = time + Double.random(in: rareInterval)
+    }
+    desiredOffset *= exp(-delta / recovery)
+    let response = 18.0
+    let damping = 8.0
+    let acceleration = (desiredOffset - currentOffset) * response - currentVelocity * damping
+    currentVelocity += acceleration * delta
+    currentOffset += currentVelocity * delta
+    currentOffset = max(-maximumOffset, min(maximumOffset, currentOffset))
+    return currentOffset
   }
 }

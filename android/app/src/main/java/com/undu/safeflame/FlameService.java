@@ -36,13 +36,9 @@ public final class FlameService extends Service {
     private PowerManager.WakeLock wakeLock;
     private int mode;
     private boolean running;
-    private double motionStartedAt;
     private double lastMotionTime;
     private double torchLevel;
-    private double torchVelocity;
-    private FlameDrift quickMotion = new FlameDrift(0.35);
-    private FlameDrift bodyMotion = new FlameDrift(1.3);
-    private FlameDrift slowMotion = new FlameDrift(4.7);
+    private FlameEventMotion flameMotion = new FlameEventMotion(0);
 
     private final Runnable flicker = new Runnable() {
         @Override
@@ -51,41 +47,12 @@ public final class FlameService extends Service {
                 return;
             }
             double now = SystemClock.elapsedRealtime() / 1000.0;
-            double elapsed = now - motionStartedAt;
             double delta = Math.min(0.1, Math.max(1.0 / 120.0, now - lastMotionTime));
             lastMotionTime = now;
-
-            double quickWeight;
-            double bodyWeight;
-            double slowWeight;
-            if (mode == 1) {
-                quickWeight = 0.10;
-                bodyWeight = 0.55;
-                slowWeight = 0.35;
-            } else if (mode == 2) {
-                quickWeight = 0.05;
-                bodyWeight = 0.25;
-                slowWeight = 0.70;
-            } else {
-                quickWeight = 0.25;
-                bodyWeight = 0.60;
-                slowWeight = 0.15;
-            }
-            double noise = Math.tanh(1.8 * (quickWeight * quickMotion.value(elapsed)
-                    + bodyWeight * bodyMotion.value(elapsed)
-                    + slowWeight * slowMotion.value(elapsed)));
+            double base = mode == 2 ? 0.312 : 0.320;
             double minimum = (mode == 2 ? 0.30 : 0.22) * 0.8;
             double maximum = (mode == 2 ? 0.48 : 0.58) * 0.8;
-            double target = minimum + (maximum - minimum) * (0.5 + 0.5 * noise);
-
-            // Mean-reverting movement avoids held high/low targets while
-            // remaining smooth between every 60 Hz torch update.
-            double response = mode == 2 ? 0.45 : mode == 1 ? 0.95 : 1.35;
-            double damping = mode == 2 ? 1.25 : mode == 1 ? 1.65 : 1.95;
-            double acceleration = (target - torchLevel) * response - torchVelocity * damping;
-            torchVelocity += acceleration * delta;
-            torchLevel += torchVelocity * delta;
-            torchLevel = Math.max(minimum, Math.min(maximum, torchLevel));
+            torchLevel = Math.max(minimum, Math.min(maximum, base + flameMotion.value(delta)));
             setTorch((float) torchLevel);
             handler.postDelayed(this, 16L);
         }
@@ -138,20 +105,16 @@ public final class FlameService extends Service {
                 .apply();
         startAudio();
         handler.removeCallbacks(flicker);
-        motionStartedAt = SystemClock.elapsedRealtime() / 1000.0;
-        lastMotionTime = motionStartedAt;
+        lastMotionTime = SystemClock.elapsedRealtime() / 1000.0;
+        flameMotion = new FlameEventMotion(mode);
         torchLevel = initialLevel();
-        torchVelocity = 0;
-        bodyMotion = new FlameDrift(mode == 1 ? 2.0 : 1.3);
-        slowMotion = new FlameDrift(mode == 1 ? 5.3 : 4.7);
-        quickMotion = new FlameDrift(mode == 1 ? 0.65 : mode == 2 ? 1.8 : 0.35);
         setTorch((float) torchLevel);
         handler.post(flicker);
         return START_STICKY;
     }
 
     private float initialLevel() {
-        return (mode == 2 ? 0.38f : 0.42f) * 0.8f;
+        return mode == 2 ? 0.312f : 0.320f;
     }
 
     private void startForegroundSafely() {
@@ -309,33 +272,60 @@ public final class FlameService extends Service {
                 || Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic");
     }
 
-    // Same cubic B-spline noise as iOS: continuous value, velocity and
-    // acceleration across random control points, with no stops at knots.
-    private final class FlameDrift {
-        private final double interval;
-        private int segment;
-        private final double[] points = new double[4];
+    private final class FlameEventMotion {
+        private final double eventMin;
+        private final double eventMax;
+        private final double recovery;
+        private final double regularKick;
+        private final double rareKick;
+        private final double rareMin;
+        private final double rareMax;
+        private final double maximumOffset;
+        private double time;
+        private double nextEvent;
+        private double nextRareEvent;
+        private double desiredOffset;
+        private double currentOffset;
+        private double currentVelocity;
 
-        FlameDrift(double interval) {
-            this.interval = interval;
-            for (int i = 0; i < points.length; i++) points[i] = random.nextDouble() * 2 - 1;
+        FlameEventMotion(int mode) {
+            if (mode == 1) {
+                eventMin = 0.55; eventMax = 1.80; recovery = 0.34;
+                regularKick = 0.003; rareKick = 0.012;
+                rareMin = 4.0; rareMax = 9.0; maximumOffset = 0.144;
+            } else if (mode == 2) {
+                eventMin = 1.40; eventMax = 3.20; recovery = 0.70;
+                regularKick = 0.0015; rareKick = 0.004;
+                rareMin = 8.0; rareMax = 16.0; maximumOffset = 0.072;
+            } else {
+                eventMin = 0.22; eventMax = 0.75; recovery = 0.78;
+                regularKick = 0.008; rareKick = 0.020;
+                rareMin = 1.8; rareMax = 4.8; maximumOffset = 0.144;
+            }
+            nextEvent = randomBetween(eventMin, eventMax);
+            nextRareEvent = randomBetween(rareMin, rareMax);
         }
 
-        double value(double time) {
-            double position = Math.max(0, time) / interval;
-            int nextSegment = (int) position;
-            while (segment < nextSegment) {
-                System.arraycopy(points, 1, points, 0, 3);
-                points[3] = random.nextDouble() * 2 - 1;
-                segment++;
+        double value(double delta) {
+            time += delta;
+            if (time >= nextEvent) {
+                desiredOffset += randomBetween(-regularKick, regularKick);
+                nextEvent = time + randomBetween(eventMin, eventMax);
             }
-            double u = position - segment;
-            double u2 = u * u;
-            double u3 = u2 * u;
-            return (Math.pow(1 - u, 3) * points[0]
-                    + (3 * u3 - 6 * u2 + 4) * points[1]
-                    + (-3 * u3 + 3 * u2 + 3 * u + 1) * points[2]
-                    + u3 * points[3]) / 6;
+            if (time >= nextRareEvent) {
+                desiredOffset += randomBetween(-rareKick, rareKick);
+                nextRareEvent = time + randomBetween(rareMin, rareMax);
+            }
+            desiredOffset *= Math.exp(-delta / recovery);
+            double acceleration = (desiredOffset - currentOffset) * 18.0 - currentVelocity * 8.0;
+            currentVelocity += acceleration * delta;
+            currentOffset += currentVelocity * delta;
+            currentOffset = Math.max(-maximumOffset, Math.min(maximumOffset, currentOffset));
+            return currentOffset;
+        }
+
+        private double randomBetween(double minimum, double maximum) {
+            return minimum + random.nextDouble() * (maximum - minimum);
         }
     }
 
