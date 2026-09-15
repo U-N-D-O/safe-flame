@@ -190,7 +190,8 @@ public final class FlameService extends Service {
         stopAudio();
         String fileName = mode == 1 ? "candle.wav" : mode == 2 ? "nightlight.wav" : "fireplace.wav";
         try {
-            android.content.res.AssetFileDescriptor descriptor = getAssets().openFd(fileName);
+            android.content.res.AssetFileDescriptor descriptor = getAssets().openFd(
+                    "flutter_assets/files/SafeFlame/Resources/" + fileName);
             MediaPlayer player = new MediaPlayer();
             player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
             player.setDataSource(descriptor.getFileDescriptor(), descriptor.getStartOffset(), descriptor.getLength());

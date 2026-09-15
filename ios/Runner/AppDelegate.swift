@@ -138,10 +138,10 @@ private final class SafeFlamePlatformController: NSObject {
       try session.setActive(true)
 
       guard let url = Bundle.main.url(
-        forResource: "files/SafeFlame/Resources/\(soundName)",
+        forResource: soundName,
         withExtension: "wav",
-        subdirectory: "flutter_assets"
-      ) ?? Bundle.main.url(forResource: soundName, withExtension: "wav") else { return }
+        subdirectory: "flutter_assets/files/SafeFlame/Resources"
+      ) else { return }
 
       let file = try AVAudioFile(forReading: url)
       guard let buffer = AVAudioPCMBuffer(
