@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 
 import java.io.IOException;
 import java.util.Random;
@@ -35,6 +36,31 @@ public final class FlameService extends Service {
     private PowerManager.WakeLock wakeLock;
     private int mode;
     private boolean running;
+    private float torchLevel = 0.42f;
+    private float transitionStartLevel = 0.42f;
+    private float transitionTargetLevel = 0.42f;
+    private long transitionStartedAt;
+    private long transitionDurationMs = 250L;
+
+    private final Runnable torchTransition = new Runnable() {
+        @Override
+        public void run() {
+            if (!running) {
+                return;
+            }
+            float progress = Math.min(1f, (SystemClock.uptimeMillis() - transitionStartedAt)
+                    / (float) transitionDurationMs);
+            float eased = progress * progress * (3f - 2f * progress);
+            torchLevel = transitionStartLevel
+                    + (transitionTargetLevel - transitionStartLevel) * eased;
+            setTorch(torchLevel);
+            if (progress < 1f) {
+                handler.postDelayed(this, 33L);
+            } else {
+                torchLevel = transitionTargetLevel;
+            }
+        }
+    };
 
     private final Runnable flicker = new Runnable() {
         @Override
@@ -46,7 +72,10 @@ public final class FlameService extends Service {
             float level = mode == 2
                     ? randomBetween(0.30f, 0.48f)
                     : randomBetween(gust ? 0.22f : 0.30f, gust ? 0.58f : 0.52f);
-            setTorch(level);
+            long transitionDuration = mode == 2
+                    ? randomBetweenLong(350, 800)
+                    : mode == 1 ? randomBetweenLong(220, 580) : randomBetweenLong(200, 520);
+            animateTorch(level, transitionDuration);
             long delay = mode == 2
                     ? randomBetweenLong(1200, 2600)
                     : mode == 1 ? randomBetweenLong(450, 1500) : randomBetweenLong(350, 1150);
@@ -101,9 +130,20 @@ public final class FlameService extends Service {
                 .apply();
         startAudio();
         handler.removeCallbacks(flicker);
-        setTorch(mode == 2 ? 0.38f : 0.42f);
+        handler.removeCallbacks(torchTransition);
+        torchLevel = mode == 2 ? 0.38f : 0.42f;
+        setTorch(torchLevel);
         handler.post(flicker);
         return START_STICKY;
+    }
+
+    private void animateTorch(float target, long durationMs) {
+        transitionStartLevel = torchLevel;
+        transitionTargetLevel = target;
+        transitionStartedAt = SystemClock.uptimeMillis();
+        transitionDurationMs = Math.max(80L, durationMs);
+        handler.removeCallbacks(torchTransition);
+        handler.post(torchTransition);
     }
 
     private void startForegroundSafely() {
@@ -227,6 +267,7 @@ public final class FlameService extends Service {
                 .putBoolean("running", false)
                 .apply();
         handler.removeCallbacks(flicker);
+        handler.removeCallbacks(torchTransition);
         turnTorchOff();
         stopAudio();
         if (wakeLock != null && wakeLock.isHeld()) {

@@ -31,6 +31,12 @@ import UIKit
 private final class SafeFlamePlatformController: NSObject {
   private var torch: AVCaptureDevice?
   private var flickerTimer: Timer?
+  private var transitionTimer: Timer?
+  private var torchLevel: Float = 0
+  private var transitionStartLevel: Float = 0
+  private var transitionTargetLevel: Float = 0
+  private var transitionStartedAt = Date()
+  private var transitionDuration: TimeInterval = 0.25
   private var audioEngine: AVAudioEngine?
   private var audioPlayerNode: AVAudioPlayerNode?
   private var mode = 0
@@ -57,11 +63,13 @@ private final class SafeFlamePlatformController: NSObject {
     guard let torch, torch.hasTorch, torch.isTorchAvailable else { return false }
 
     self.mode = max(0, min(mode, 2))
+    let initialTorchLevel = initialLevel()
     do {
-      try setTorch(initialLevel())
+      try setTorch(initialTorchLevel)
     } catch {
       return false
     }
+    torchLevel = initialTorchLevel
 
     running = true
     UIApplication.shared.isIdleTimerDisabled = true
@@ -71,10 +79,12 @@ private final class SafeFlamePlatformController: NSObject {
   }
 
   private func stop() {
-    guard running || flickerTimer != nil else { return }
+    guard running || flickerTimer != nil || transitionTimer != nil else { return }
     running = false
     flickerTimer?.invalidate()
     flickerTimer = nil
+    transitionTimer?.invalidate()
+    transitionTimer = nil
     stopAudio()
     UIApplication.shared.isIdleTimerDisabled = false
 
@@ -105,13 +115,52 @@ private final class SafeFlamePlatformController: NSObject {
   private func flicker() {
     guard running else { return }
     let level: Float
+    let duration: TimeInterval
     switch mode {
-    case 1: level = Float.random(in: 0.040...0.090)
-    case 2: level = Float.random(in: 0.022...0.050)
-    default: level = Float.random(in: 0.042...0.095)
+    case 1:
+      level = Float.random(in: 0.040...0.090)
+      duration = Double.random(in: 0.22...0.58)
+    case 2:
+      level = Float.random(in: 0.022...0.050)
+      duration = Double.random(in: 0.35...0.80)
+    default:
+      level = Float.random(in: 0.042...0.095)
+      duration = Double.random(in: 0.20...0.52)
     }
-    try? setTorch(level)
+    animateTorch(to: level, over: duration)
     scheduleFlicker()
+  }
+
+  private func animateTorch(to target: Float, over duration: TimeInterval) {
+    guard running else { return }
+
+    transitionTimer?.invalidate()
+    transitionStartLevel = torchLevel
+    transitionTargetLevel = target
+    transitionStartedAt = Date()
+    transitionDuration = max(0.08, duration)
+
+    let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] timer in
+      guard let self, self.running else {
+        timer.invalidate()
+        return
+      }
+
+      let progress = min(1.0, Date().timeIntervalSince(self.transitionStartedAt) / self.transitionDuration)
+      let eased = progress * progress * (3.0 - 2.0 * progress)
+      let level = self.transitionStartLevel
+        + (self.transitionTargetLevel - self.transitionStartLevel) * Float(eased)
+      self.torchLevel = level
+      try? self.setTorch(level)
+
+      if progress >= 1.0 {
+        self.torchLevel = self.transitionTargetLevel
+        timer.invalidate()
+        self.transitionTimer = nil
+      }
+    }
+    transitionTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
   }
 
   private func initialLevel() -> Float {
